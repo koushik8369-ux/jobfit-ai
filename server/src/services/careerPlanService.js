@@ -153,7 +153,10 @@ export function createCareerPlanService({
         throw createError('Not enough information yet to create actionable career-plan items.', 400);
       }
 
-      const previous = await planModel.findOne({ user: user.id, status: 'ACTIVE' }).sort({ updatedAt: -1 });
+      const previous = await planModel.findOne({
+        user: user.id,
+        status: { $in: ['ACTIVE', 'COMPLETED'] },
+      }).sort({ updatedAt: -1 });
       if (previous) {
         previous.status = 'ARCHIVED';
         previous.updatedAt = new Date();
@@ -199,7 +202,10 @@ export function createCareerPlanService({
     },
 
     async getCurrent(user) {
-      const plan = await planModel.findOne({ user: user.id, status: 'ACTIVE' }).sort({ updatedAt: -1 });
+      const plan = await planModel.findOne({
+        user: user.id,
+        status: { $in: ['ACTIVE', 'COMPLETED'] },
+      }).sort({ updatedAt: -1 });
       if (!plan) throw createError('Current career plan was not found', 404);
       return responseFromPlan(plan);
     },
@@ -223,6 +229,11 @@ export function createCareerPlanService({
         item.completed = update.status === 'COMPLETED';
       } else {
         throw createError('Provide a valid completed flag or item status', 400);
+      }
+      if (plan.status !== 'ARCHIVED') {
+        plan.status = plan.items.length > 0 && plan.items.every(
+          (planItem) => planItem.completed || planItem.status === 'COMPLETED',
+        ) ? 'COMPLETED' : 'ACTIVE';
       }
       plan.updatedAt = new Date();
       await plan.save();
