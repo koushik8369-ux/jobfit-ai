@@ -15,6 +15,7 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [targetRole, setTargetRole] = useState<string>('');
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -22,6 +23,7 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
       const file = e.target.files[0];
       validateAndSetFile(file);
     }
+    e.target.value = '';
   };
 
   const validateAndSetFile = (file: File) => {
@@ -30,10 +32,11 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
     const isValidExtension = lowerName.endsWith('.pdf') || lowerName.endsWith('.docx') || lowerName.endsWith('.doc') || lowerName.endsWith('.txt');
 
     if (!isValidExtension && !validTypes.includes(file.type)) {
-      alert('Please upload a valid document format (.pdf, .docx, .doc, .txt)');
+      setFileError('Please upload a valid document format (.pdf, .docx, .doc, .txt).');
       return;
     }
     setSelectedFile(file);
+    setFileError(null);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -79,11 +82,12 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
       <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
         {/* Target Job Role Input */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2 flex items-center gap-2">
+          <label htmlFor="resume-target-role" className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2 flex items-center gap-2">
             <Target className="w-4 h-4 text-brand-400" />
             Target Job Role (Optional)
           </label>
           <input
+            id="resume-target-role"
             type="text"
             value={targetRole}
             onChange={(e) => setTargetRole(e.target.value)}
@@ -115,8 +119,19 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => !selectedFile && fileInputRef.current?.click()}
-          className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-200 cursor-pointer ${
+          onClick={() => !selectedFile && !isLoading && fileInputRef.current?.click()}
+          onKeyDown={(event) => {
+            if (!selectedFile && !isLoading && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
+          role={!selectedFile ? 'button' : undefined}
+          tabIndex={!selectedFile && !isLoading ? 0 : undefined}
+          aria-label={!selectedFile ? 'Choose a resume file' : undefined}
+          aria-describedby={!selectedFile ? 'resume-upload-help' : undefined}
+          aria-disabled={isLoading}
+          className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
             isDragOver
               ? 'border-brand-500 bg-brand-500/10 scale-[1.01]'
               : selectedFile
@@ -129,8 +144,10 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
             type="file"
             accept=".pdf,.docx,.doc,.txt"
             onChange={handleFileChange}
-            className="hidden"
+            className="sr-only"
             disabled={isLoading}
+            tabIndex={-1}
+            aria-hidden="true"
           />
 
           {!selectedFile ? (
@@ -143,7 +160,9 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
                   Click to upload or drag & drop resume
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
+                  <span id="resume-upload-help">
                   Supports PDF, DOCX, DOC, or TXT (Max 10MB)
+                  </span>
                 </p>
               </div>
             </div>
@@ -167,9 +186,12 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedFile(null);
+                  setFileError(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
                 disabled={isLoading}
+                aria-label="Remove selected resume"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -177,8 +199,15 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
           )}
         </div>
 
+        {fileError && (
+          <div role="alert" className="flex items-center gap-2.5 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+            <span>{fileError}</span>
+          </div>
+        )}
+
         {error && (
-          <div className="flex items-center gap-2.5 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+          <div role="alert" className="flex items-center gap-2.5 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
             <span>{error}</span>
           </div>

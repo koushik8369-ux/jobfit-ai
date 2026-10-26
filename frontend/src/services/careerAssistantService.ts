@@ -15,6 +15,8 @@ import type {
   ResumeImprovementResult,
 } from '../types';
 
+const CAREER_AI_REQUEST_TIMEOUT_MS = 35_000;
+
 export const createCareerAssistantConversation = async (): Promise<CareerAssistantConversation> => {
   const response = await api.post<CareerAssistantConversation>('/career-assistant/conversations');
   return response.data;
@@ -37,30 +39,46 @@ export const sendCareerAssistantMessage = async (
   const response = await api.post<CareerAssistantMessage>(
     `/career-assistant/conversations/${conversationId}/messages`,
     request,
-    { timeout: 0 },
+    { timeout: CAREER_AI_REQUEST_TIMEOUT_MS },
   );
   return response.data;
 };
 
 export const requestResumeImprovement = async (): Promise<ResumeImprovementResult> => {
-  const response = await api.post<ResumeImprovementResult>('/career-assistant/resume-improvement');
+  const response = await api.post<ResumeImprovementResult>(
+    '/career-assistant/resume-improvement',
+    undefined,
+    { timeout: CAREER_AI_REQUEST_TIMEOUT_MS },
+  );
   return response.data;
 };
 
 export const generateSkillRoadmap = async (): Promise<CareerRoadmapResult> => {
-  const response = await api.post<CareerRoadmapResult>('/career-assistant/roadmap');
+  const response = await api.post<CareerRoadmapResult>(
+    '/career-assistant/roadmap',
+    undefined,
+    { timeout: CAREER_AI_REQUEST_TIMEOUT_MS },
+  );
   return response.data;
 };
 
 export const generateProjectRecommendations = async (
   preferences: ProjectRecommendationPreferences = {},
 ): Promise<ProjectRecommendationResult> => {
-  const response = await api.post<ProjectRecommendationResult>('/career-assistant/projects', preferences);
+  const response = await api.post<ProjectRecommendationResult>(
+    '/career-assistant/projects',
+    preferences,
+    { timeout: CAREER_AI_REQUEST_TIMEOUT_MS },
+  );
   return response.data;
 };
 
 export const prepareForInterview = async (): Promise<InterviewPreparationResult> => {
-  const response = await api.post<InterviewPreparationResult>('/career-assistant/interview-preparation');
+  const response = await api.post<InterviewPreparationResult>(
+    '/career-assistant/interview-preparation',
+    undefined,
+    { timeout: CAREER_AI_REQUEST_TIMEOUT_MS },
+  );
   return response.data;
 };
 
@@ -70,17 +88,26 @@ export const getInterviewAnswerFeedback = async (
   const response = await api.post<InterviewAnswerFeedback>(
     '/career-assistant/interview-preparation/feedback',
     request,
+    { timeout: CAREER_AI_REQUEST_TIMEOUT_MS },
   );
   return response.data;
 };
 
 export const generateCareerActionPlan = async (): Promise<CareerActionPlanResult> => {
-  const response = await api.post<CareerActionPlanResult>('/career-assistant/action-plan');
+  const response = await api.post<CareerActionPlanResult>(
+    '/career-assistant/action-plan',
+    undefined,
+    { timeout: CAREER_AI_REQUEST_TIMEOUT_MS },
+  );
   return response.data;
 };
 
 export const generateCareerPlan = async (): Promise<CareerPlan> => {
-  const response = await api.post<CareerPlan>('/career-plans');
+  const response = await api.post<CareerPlan>(
+    '/career-plans',
+    undefined,
+    { timeout: CAREER_AI_REQUEST_TIMEOUT_MS },
+  );
   return response.data;
 };
 

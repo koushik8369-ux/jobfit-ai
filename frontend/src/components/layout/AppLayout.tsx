@@ -1,11 +1,17 @@
-import React from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Sparkles, Home, LayoutDashboard, Info, LogIn, LogOut, UserCircle2, FileText, Briefcase, Bot, CalendarCheck, MessageSquareText, FolderKanban } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Sparkles, Home, LayoutDashboard, Info, LogIn, LogOut, UserCircle2, FileText, Briefcase, Bot, CalendarCheck, MessageSquareText, FolderKanban, Menu, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location.pathname]);
 
   const navLinks = [
     { to: '/', label: 'Home', icon: Home },
@@ -29,7 +35,7 @@ export const AppLayout: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-brand-500/30 selection:text-brand-200">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 flex items-center justify-between gap-3">
           {/* Brand / Logo */}
           <NavLink
             to="/"
@@ -43,33 +49,11 @@ export const AppLayout: React.FC = () => {
               <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-brand-300 bg-clip-text text-transparent">
                 JOBFIT AI
               </span>
-              <span className="text-[10px] font-medium tracking-wider text-slate-400 uppercase -mt-1">
+              <span className="hidden md:block text-[10px] font-medium tracking-wider text-slate-400 uppercase -mt-1">
                 Career Intelligence
               </span>
             </div>
           </NavLink>
-
-          {/* Navigation Links */}
-          <nav className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-center" id="main-nav">
-            {navLinks.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                id={`nav-link-${label.toLowerCase()}`}
-                end={to === '/'}
-                className={({ isActive }) =>
-                  `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? 'bg-brand-500/15 text-brand-300 border border-brand-500/30 shadow-sm shadow-brand-500/10'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
-                  }`
-                }
-              >
-                <Icon className="w-4 h-4" />
-                <span className="hidden sm:inline">{label}</span>
-              </NavLink>
-            ))}
-          </nav>
 
           {/* Auth controls */}
           <div className="flex items-center gap-2 shrink-0">
@@ -87,7 +71,7 @@ export const AppLayout: React.FC = () => {
                 <button
                   id="nav-logout-btn"
                   onClick={handleLogout}
-                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-200"
+                  className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                   aria-label="Log out"
                 >
                   <LogOut className="w-4 h-4" />
@@ -98,16 +82,53 @@ export const AppLayout: React.FC = () => {
               <NavLink
                 to="/login"
                 id="nav-login-btn"
-                className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold
+                className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-sm font-semibold
                            bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500
-                           text-white shadow-md shadow-brand-500/20 transition-all duration-200 hover:scale-[1.02]"
+                           text-white shadow-md shadow-brand-500/20 transition-all duration-200 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
               >
                 <LogIn className="w-4 h-4" />
                 <span>Login</span>
               </NavLink>
             )}
+            <button
+              type="button"
+              className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700/70 text-slate-300 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={isMenuOpen}
+              aria-controls="main-nav"
+              onClick={() => setIsMenuOpen((open) => !open)}
+            >
+              {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+        <nav
+          className={`${isMenuOpen ? 'block' : 'hidden'} lg:block border-t border-slate-800/70`}
+          id="main-nav"
+          aria-label="Primary navigation"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:flex lg:flex-wrap lg:justify-center gap-2">
+            {navLinks.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                id={`nav-link-${label.toLowerCase()}`}
+                end={to === '/'}
+                onClick={() => setIsMenuOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center justify-center lg:justify-start gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
+                    isActive
+                      ? 'bg-brand-500/15 text-brand-300 border border-brand-500/30 shadow-sm shadow-brand-500/10'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  }`
+                }
+              >
+                <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </div>
+        </nav>
       </header>
 
       {/* Main Content Area */}

@@ -36,6 +36,8 @@ describe('foundation configuration and middleware', () => {
 
     assert.equal(calls[0].uri, mongoUri);
     assert.equal(calls[0].options.serverSelectionTimeoutMS, 5000);
+    assert.equal(calls[0].options.autoIndex, false);
+    assert.equal(calls[0].options.autoCreate, false);
     assert.equal(logs.join(' ').includes(fakeDatabasePassword), false);
   });
 

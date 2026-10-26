@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Award, BookOpen, LayoutDashboard, Loader2, Target, UserCircle2 } from 'lucide-react';
 import { getAuthErrorMessage } from '../services/authService';
@@ -9,33 +9,45 @@ export const DashboardPage: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestInFlight = useRef(false);
+  const isMounted = useRef(false);
+
+  const loadDashboard = useCallback(async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await getDashboard();
+      if (isMounted.current) setDashboard(response);
+    } catch (err: unknown) {
+      if (isMounted.current) {
+        setError(getAuthErrorMessage(err, 'Unable to load your dashboard. Please try again.'));
+      }
+    } finally {
+      requestInFlight.current = false;
+      if (isMounted.current) setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadDashboard = async () => {
-      try {
-        const response = await getDashboard();
-        if (isMounted) setDashboard(response);
-      } catch (err: unknown) {
-        if (isMounted) {
-          setError(getAuthErrorMessage(err, 'Unable to load your dashboard. Please try again.'));
-        }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
+    isMounted.current = true;
     void loadDashboard();
-    return () => { isMounted = false; };
-  }, []);
+    return () => { isMounted.current = false; };
+  }, [loadDashboard]);
 
   if (isLoading) {
     return <LoadingState label="Loading your dashboard..." />;
   }
 
   if (error || !dashboard) {
-    return <ErrorState message={error ?? 'Dashboard data is unavailable.'} />;
+    return (
+      <ErrorState
+        message={error ?? 'Dashboard data is unavailable.'}
+        onRetry={() => { void loadDashboard(); }}
+      />
+    );
   }
 
   const completion = Math.min(100, Math.max(0, dashboard.profileCompletionPercentage));
@@ -135,11 +147,19 @@ const LoadingState: React.FC<{ label: string }> = ({ label }) => (
   </div>
 );
 
-const ErrorState: React.FC<{ message: string }> = ({ message }) => (
-  <div className="glass-card p-8 max-w-xl mx-auto text-center space-y-3">
+const ErrorState: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
+  <div className="glass-card p-8 max-w-xl mx-auto text-center space-y-4" role="alert">
     <AlertCircle className="w-8 h-8 mx-auto text-rose-400" />
     <h2 className="text-lg font-semibold text-white">Unable to load dashboard</h2>
     <p className="text-sm text-slate-400">{message}</p>
+    <button
+      type="button"
+      onClick={onRetry}
+      className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
+      aria-label="Retry loading dashboard"
+    >
+      Retry
+    </button>
   </div>
 );
 

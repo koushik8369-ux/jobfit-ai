@@ -16,7 +16,11 @@ export async function connectDatabase({ env = process.env, client = mongoose, lo
   const uri = getMongoUri(env);
 
   try {
-    await client.connect(uri, { serverSelectionTimeoutMS: 5000 });
+    await client.connect(uri, {
+      serverSelectionTimeoutMS: 5000,
+      autoIndex: false,
+      autoCreate: false,
+    });
     logger.info('MongoDB connection established.');
   } catch (error) {
     logger.error(`MongoDB connection failed (${error?.name || 'ConnectionError'}). Check MONGODB_URI and database availability.`);

@@ -15,7 +15,7 @@ export const HomePage: React.FC = () => {
       const res = await checkHealth();
       setHealthStatus(res.status);
     } catch (err: unknown) {
-      setHealthError('Failed to connect to backend. Please ensure the backend is running on port 8080.');
+      setHealthError('Failed to connect to backend. Please ensure the Node.js API is running on port 5000.');
     } finally {
       setIsLoadingHealth(false);
     }
