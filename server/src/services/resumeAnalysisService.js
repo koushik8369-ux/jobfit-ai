@@ -358,10 +358,181 @@ function generateSuggestions({ missingSections, weakSections, skills, jobMarketI
   return [...new Set(suggestions)];
 }
 
+function unavailableJobSpecificAnalysis(targetRole, status, message) {
+  return {
+    status,
+    message,
+    targetRole,
+    jobFitScore: null,
+    skillCoverage: null,
+    requiredSkills: [],
+    matchedSkills: [],
+    missingSkills: [],
+    marketInsights: {
+      relevantJobCount: 0,
+      searchBasis: null,
+      commonSkills: [],
+      technicalSkills: [],
+      toolsAndTechnologies: [],
+      experienceRequirements: [],
+      salaryRange: null,
+    },
+    atsAnalysis: null,
+    recommendations: [],
+    bulletImprovements: [],
+  };
+}
+
+function createRoleAtsAnalysis(result, marketInsights) {
+  const requiredSkills = marketInsights.requiredSkills.map(({ skill }) => skill);
+  const matchedSkills = marketInsights.matchedSkills;
+  const missingSkills = marketInsights.missingSkills;
+  const sectionChecks = [
+    { section: 'Contact information', status: result.detectedEmail && result.detectedPhone ? 'complete' : 'incomplete' },
+    { section: 'Professional summary', status: result.detectedSummary ? 'present' : 'missing' },
+    { section: 'Skills', status: result.detectedSkills.length > 0 ? 'present' : 'missing' },
+    { section: 'Experience', status: result.detectedExperience.length > 0 ? 'present' : 'missing' },
+    { section: 'Education', status: result.detectedEducation.length > 0 ? 'present' : 'missing' },
+    { section: 'Projects', status: result.detectedProjects.length > 0 ? 'present' : 'missing' },
+    { section: 'Certifications', status: result.detectedCertifications.length > 0 ? 'present' : 'missing' },
+    { section: 'Action verbs', status: result.atsAnalysis.actionVerbs.detected ? 'detected' : 'not_detected' },
+    { section: 'Quantified achievements', status: result.atsAnalysis.quantifiedAchievements.detected ? 'detected' : 'not_detected' },
+  ];
+  const keywordCoverage = marketInsights.skillCoverage;
+  const scoreBreakdown = {
+    keywordCoverage: keywordCoverage == null ? 0 : Math.round(keywordCoverage * 0.4),
+    contactInformation: result.detectedEmail && result.detectedPhone ? 10 : result.detectedEmail || result.detectedPhone ? 5 : 0,
+    summary: result.detectedSummary ? 10 : 0,
+    skills: result.detectedSkills.length > 0 ? 10 : 0,
+    experience: result.detectedExperience.length > 0 ? 10 : 0,
+    education: result.detectedEducation.length > 0 ? 5 : 0,
+    projects: result.detectedProjects.length > 0 ? 5 : 0,
+    certifications: result.detectedCertifications.length > 0 ? 5 : 0,
+    actionVerbs: result.atsAnalysis.actionVerbs.detected ? 3 : 0,
+    quantifiedAchievements: result.atsAnalysis.quantifiedAchievements.detected ? 2 : 0,
+  };
+
+  return {
+    score: Object.values(scoreBreakdown).reduce((sum, score) => sum + score, 0),
+    scoreBreakdown,
+    keywordCoverage: {
+      percentage: keywordCoverage,
+      required: requiredSkills,
+      matched: matchedSkills,
+      missing: missingSkills,
+    },
+    missingKeywords: missingSkills,
+    contactInformation: result.atsAnalysis.contactInformation,
+    summaryStatus: result.detectedSummary ? result.atsAnalysis.summaryQuality : 'missing',
+    sectionChecks,
+    actionVerbs: result.atsAnalysis.actionVerbs,
+    quantifiedAchievements: result.atsAnalysis.quantifiedAchievements,
+  };
+}
+
+function createRecommendations(result, marketInsights) {
+  const recommendations = [];
+  const gaps = marketInsights.requiredSkills
+    .filter(({ skill }) => marketInsights.missingSkills.includes(skill));
+  for (const gap of gaps) {
+    const recommendation = {
+      priority: gap.frequencyPercent >= 50 ? 'HIGH' : 'MEDIUM',
+      skill: gap.skill,
+      message: `${gap.skill} appears in ${gap.jobCount} of ${marketInsights.relevantJobCount} matching job postings but was not detected in your resume. Include it only if you have that experience, or consider developing the skill.`,
+    };
+    recommendations.push(recommendation);
+  }
+  if (result.detectedExperience.length > 0 && !result.atsAnalysis.quantifiedAchievements.detected) {
+    recommendations.push({
+      priority: 'MEDIUM',
+      skill: null,
+      message: 'Add measurable outcomes to experience or project bullets where you can substantiate them.',
+    });
+  }
+  for (const section of result.missingSections) {
+    recommendations.push({
+      priority: 'OPTIONAL',
+      skill: null,
+      message: `Add or clarify the ${section.toLocaleLowerCase()} section if relevant to your background.`,
+    });
+  }
+  return recommendations;
+}
+
+function createBulletImprovements(result) {
+  const weakPattern = /^\s*(?:worked on|responsible for|helped with|did|made)\b[,: -]*/i;
+  return [...result.detectedExperience, ...result.detectedProjects]
+    .filter((bullet) => weakPattern.test(bullet))
+    .map((original) => {
+      const task = original.replace(weakPattern, '').replace(/[.!;]+$/, '').trim();
+      const technologies = result.detectedSkills.filter((skill) => (
+        new RegExp(`\\b${escapeRegex(skill)}\\b`, 'i').test(original)
+      ));
+      const technologyText = technologies.length > 0
+        ? ` using ${technologies.join(', ')}`
+        : ' using [relevant technology]';
+      return {
+        original,
+        suggestedRewrite: `[Action verb] ${task || '[specific task performed]'}${technologyText} to [result you can substantiate].`,
+        guidance: 'Suggested structure only. Verify every detail and replace bracketed text with accurate information; do not add unverified outcomes.',
+      };
+    });
+}
+
+function createJobSpecificAnalysis(result, marketInsights) {
+  if (marketInsights.status !== 'available') {
+    const emptyMarketInsights = {
+      ...marketInsights,
+      requiredSkills: [],
+      matchedSkills: [],
+      missingSkills: [],
+      skillCoverage: null,
+    };
+    const unavailable = unavailableJobSpecificAnalysis(
+      result.targetRole,
+      marketInsights.status,
+      marketInsights.message,
+    );
+    return {
+      ...unavailable,
+      atsAnalysis: createRoleAtsAnalysis(result, emptyMarketInsights),
+      recommendations: createRecommendations(result, emptyMarketInsights),
+      bulletImprovements: createBulletImprovements(result),
+      marketInsights: {
+        ...unavailable.marketInsights,
+        relevantJobCount: marketInsights.relevantJobCount ?? 0,
+      },
+    };
+  }
+  const atsAnalysis = createRoleAtsAnalysis(result, marketInsights);
+  return {
+    status: 'available',
+    message: null,
+    targetRole: result.targetRole,
+    jobFitScore: marketInsights.skillCoverage,
+    skillCoverage: marketInsights.skillCoverage,
+    requiredSkills: marketInsights.requiredSkills,
+    matchedSkills: marketInsights.matchedSkills,
+    missingSkills: marketInsights.missingSkills,
+    marketInsights: {
+      relevantJobCount: marketInsights.relevantJobCount,
+      searchBasis: marketInsights.searchBasis,
+      commonSkills: marketInsights.commonSkills,
+      technicalSkills: marketInsights.technicalSkills,
+      toolsAndTechnologies: marketInsights.toolsAndTechnologies,
+      experienceRequirements: marketInsights.experienceRequirements,
+      salaryRange: marketInsights.salaryRange,
+    },
+    atsAnalysis,
+    recommendations: createRecommendations(result, marketInsights),
+    bulletImprovements: createBulletImprovements(result),
+  };
+}
+
 function calculateJobMatch(role, detectedSkills) {
-  const normalizedRole = role.toLocaleLowerCase().trim();
-  const targetSkills = ROLE_SKILLS_MAP[normalizedRole]
-    ?? ROLE_SKILLS_MAP['full stack developer'];
+  const normalizedRole = typeof role === 'string' ? role.toLocaleLowerCase().trim() : '';
+  const targetSkills = ROLE_SKILLS_MAP[normalizedRole];
+  if (!targetSkills) return null;
   const detectedSkillSet = new Set(detectedSkills);
   const matchedCount = targetSkills.filter((skill) => detectedSkillSet.has(skill)).length;
   return targetSkills.length === 0 ? 0 : Math.round((matchedCount / targetSkills.length) * 100);
@@ -409,7 +580,7 @@ export function analyzeResumeText(text, targetRole) {
     overallScore: score.overallScore,
     scoreBreakdown: score.scoreBreakdown,
     targetRole: effectiveTargetRole,
-    matchScore: calculateJobMatch(normalizedTargetRole || 'full stack developer', detectedSkills),
+    matchScore: calculateJobMatch(normalizedTargetRole, detectedSkills),
     detectedName: extractName(text),
     detectedEmail: contacts.email,
     detectedPhone: contacts.phone,
@@ -465,7 +636,14 @@ function toResumeAnalysisResponse(analysis) {
     overallScore: analysis.overallScore,
     scoreBreakdown: { ...(analysis.scoreBreakdown ?? {}) },
     targetRole: analysis.targetRole ?? null,
-    matchScore: analysis.matchScore ?? null,
+    matchScore: calculateJobMatch(analysis.targetRole, analysis.detectedSkills ?? []),
+    jobSpecificAnalysis: analysis.jobSpecificAnalysis?.status
+      ? analysis.jobSpecificAnalysis
+      : unavailableJobSpecificAnalysis(
+        analysis.targetRole ?? null,
+        'insufficient_data',
+        'Job-specific analysis is not available for this saved result.',
+      ),
     detectedName: analysis.detectedName ?? null,
     detectedEmail: analysis.detectedEmail ?? null,
     detectedPhone: analysis.detectedPhone ?? null,
@@ -493,6 +671,17 @@ function invalidTargetRoleError() {
   const error = new Error('Invalid target role.');
   error.status = 400;
   return error;
+}
+
+function isJobMarketUnavailableError(error) {
+  return error.status === 503
+    || [
+      'MongoNetworkError',
+      'MongoServerSelectionError',
+      'MongoNotConnectedError',
+      'MongoTopologyClosedError',
+    ].includes(error.name)
+    || (error.name === 'MongooseError' && /buffering timed out|server selection timed out/i.test(error.message));
 }
 
 export function createResumeAnalysisService({
@@ -523,11 +712,72 @@ export function createResumeAnalysisService({
         });
         jobMarketInsights = summarizeJobMarket(recommendations);
       } catch (error) {
-        if (error.status !== 503) throw error;
+        if (!isJobMarketUnavailableError(error)) throw error;
         jobMarketInsights = summarizeJobMarket({
           status: 'unavailable',
-          message: error.message,
+          message: error.status === 503
+            ? error.message
+            : 'Job-market data is temporarily unavailable; resume analysis was saved.',
         });
+      }
+      let jobSpecificAnalysis;
+      if (!targetRole?.trim()) {
+        jobSpecificAnalysis = unavailableJobSpecificAnalysis(
+          result.targetRole,
+          'insufficient_data',
+          'Select a target role to compare this resume with role-specific job-market requirements.',
+        );
+        jobSpecificAnalysis = createJobSpecificAnalysis(result, {
+          ...jobSpecificAnalysis,
+          requiredSkills: [],
+          matchedSkills: [],
+          missingSkills: [],
+          skillCoverage: null,
+        });
+        jobSpecificAnalysis.targetRole = null;
+      } else if (jobMarketInsights.status === 'unavailable') {
+        jobSpecificAnalysis = createJobSpecificAnalysis(result, {
+          ...unavailableJobSpecificAnalysis(result.targetRole, 'unavailable', jobMarketInsights.message),
+          requiredSkills: [],
+          matchedSkills: [],
+          missingSkills: [],
+          skillCoverage: null,
+        });
+      } else if (typeof jobMarketService.getRoleMarketInsights !== 'function') {
+        jobSpecificAnalysis = createJobSpecificAnalysis(result, {
+          ...unavailableJobSpecificAnalysis(
+            result.targetRole,
+            'insufficient_data',
+            'Role-specific market analysis is not supported by the configured job service.',
+          ),
+          requiredSkills: [],
+          matchedSkills: [],
+          missingSkills: [],
+          skillCoverage: null,
+        });
+      } else {
+        try {
+          const marketInsights = await jobMarketService.getRoleMarketInsights({
+            targetRole: result.targetRole,
+            resumeSkills: result.detectedSkills,
+          });
+          jobSpecificAnalysis = createJobSpecificAnalysis(result, marketInsights);
+        } catch (error) {
+          if (!isJobMarketUnavailableError(error)) throw error;
+          jobSpecificAnalysis = createJobSpecificAnalysis(result, {
+            ...unavailableJobSpecificAnalysis(
+              result.targetRole,
+              'unavailable',
+              error.status === 503
+                ? error.message
+                : 'Job-market data is temporarily unavailable; resume analysis was saved.',
+            ),
+            requiredSkills: [],
+            matchedSkills: [],
+            missingSkills: [],
+            skillCoverage: null,
+          });
+        }
       }
       const atsAnalysis = { ...result.atsAnalysis };
       const skillGaps = jobMarketInsights.skillGaps.map((gap) => gap.skill);
@@ -544,6 +794,7 @@ export function createResumeAnalysisService({
       });
       const update = {
         jobMarketInsights,
+        jobSpecificAnalysis,
         atsAnalysis,
         improvementSuggestions,
         weakAreas: [...new Set([...targetMissingKeywords, ...skillGaps])],

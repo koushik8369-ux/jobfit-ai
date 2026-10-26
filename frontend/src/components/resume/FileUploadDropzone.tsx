@@ -87,10 +87,27 @@ export const FileUploadDropzone: React.FC<FileUploadDropzoneProps> = ({
             type="text"
             value={targetRole}
             onChange={(e) => setTargetRole(e.target.value)}
+            list="resume-target-role-options"
             placeholder="e.g. Full Stack Developer, Data Scientist, Frontend Engineer"
             className="w-full px-4 py-3 rounded-xl bg-slate-950/80 border border-slate-700/80 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 text-sm transition-all duration-200"
             disabled={isLoading}
           />
+          <datalist id="resume-target-role-options">
+            {[
+              'Java Full Stack Developer',
+              'Java Developer',
+              'Python Developer',
+              'Backend Developer',
+              'Frontend Developer',
+              'Full Stack Developer',
+              'Software Engineer',
+              'Data Analyst',
+              'Data Scientist',
+              'DevOps Engineer',
+              'AI/ML Engineer',
+              'React Developer',
+            ].map((role) => <option key={role} value={role} />)}
+          </datalist>
         </div>
 
         {/* Drag & Drop Box */}

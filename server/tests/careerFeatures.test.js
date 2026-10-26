@@ -202,8 +202,11 @@ function createCareerModels() {
     findOne(criteria) {
       const result = plans
         .filter((plan) => String(plan.user) === String(criteria.user)
-          && (criteria.status == null || plan.status === criteria.status)
-          && (criteria._id == null || String(plan._id) === String(criteria._id)))
+            && (criteria.status == null
+              || (Array.isArray(criteria.status.$in)
+                ? criteria.status.$in.includes(plan.status)
+                : plan.status === criteria.status))
+            && (criteria._id == null || String(plan._id) === String(criteria._id)))
         .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null;
       return createQuery(result);
     },
@@ -785,6 +788,31 @@ describe('Career Assistant and Plan APIs', () => {
     assert.equal(models.planModel.records[1].status, 'ACTIVE');
   });
 
+  it('archives the previous completed plan when generating a replacement', async () => {
+    const first = await request(app)
+      .post('/api/career-plans')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.equal(first.status, 200);
+
+    let completed = first;
+    for (const item of first.body.items) {
+      completed = await request(app)
+        .patch(`/api/career-plans/${first.body.id}/items/${item.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ status: 'COMPLETED' });
+      assert.equal(completed.status, 200);
+    }
+    assert.equal(completed.body.status, 'COMPLETED');
+
+    const replacement = await request(app)
+      .post('/api/career-plans')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.equal(replacement.status, 200);
+    assert.equal(models.planModel.records[0].status, 'ARCHIVED');
+    assert.equal(models.planModel.records[1].status, 'ACTIVE');
+  });
+
   it('returns current/by-id plans and updates only the completed flag', async () => {
     const generated = await request(app).post('/api/career-plans').set('Authorization', `Bearer ${ownerToken}`);
     const current = await request(app).get('/api/career-plans/current').set('Authorization', `Bearer ${ownerToken}`);
@@ -803,6 +831,7 @@ describe('Career Assistant and Plan APIs', () => {
     assert.equal(updated.body.progress.completedItems, 1);
     assert.equal(updated.body.progress.completionPercent, Math.round(100 / generated.body.items.length));
     assert.equal(updated.body.items[0].title, item.title);
+    assert.equal(updated.body.status, 'ACTIVE');
 
     const inProgress = await request(app)
       .patch(`/api/career-plans/${generated.body.id}/items/${generated.body.items[1].id}`)
@@ -812,6 +841,28 @@ describe('Career Assistant and Plan APIs', () => {
     assert.equal(inProgress.body.items[1].completed, false);
     assert.equal(inProgress.body.items[1].status, 'IN_PROGRESS');
     assert.equal(inProgress.body.progress.inProgressItems, 1);
+
+    let completed = inProgress;
+    for (const remainingItem of generated.body.items.slice(1)) {
+      completed = await request(app)
+        .patch(`/api/career-plans/${generated.body.id}/items/${remainingItem.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ status: 'COMPLETED' });
+    }
+    assert.equal(completed.body.status, 'COMPLETED');
+
+    const currentCompleted = await request(app)
+      .get('/api/career-plans/current')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    assert.equal(currentCompleted.status, 200);
+    assert.equal(currentCompleted.body.status, 'COMPLETED');
+
+    const reopened = await request(app)
+      .patch(`/api/career-plans/${generated.body.id}/items/${item.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'IN_PROGRESS' });
+    assert.equal(reopened.body.status, 'ACTIVE');
+    assert.equal(reopened.body.progress.inProgressItems, 1);
   });
 
   it('prevents cross-user plan access and rejects malformed update payloads', async () => {

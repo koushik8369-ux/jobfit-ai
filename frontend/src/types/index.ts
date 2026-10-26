@@ -99,7 +99,7 @@ export interface ResumeAnalysisResponse {
     completeness: number;
   };
   targetRole?: string;
-  matchScore?: number;
+  matchScore?: number | null;
   detectedName: string | null;
   detectedEmail: string | null;
   detectedPhone: string | null;
@@ -148,6 +148,61 @@ export interface ResumeAnalysisResponse {
     commonSkills: Array<{ skill: string; jobCount: number }>;
     skillGaps: Array<{ skill: string; jobCount: number }>;
     jobs: JobRecommendation[];
+  };
+  jobSpecificAnalysis: {
+    status: 'available' | 'insufficient_data' | 'unavailable';
+    message: string | null;
+    targetRole: string | null;
+    jobFitScore: number | null;
+    skillCoverage: number | null;
+    requiredSkills: Array<{
+      skill: string;
+      jobCount: number;
+      frequencyPercent: number;
+      category: 'technical' | 'tool' | 'other';
+    }>;
+    matchedSkills: string[];
+    missingSkills: string[];
+    marketInsights: {
+      relevantJobCount: number;
+      searchBasis: 'role_profile' | 'detected_resume_skills' | null;
+      commonSkills: Array<{ skill: string; jobCount: number; frequencyPercent: number }>;
+      technicalSkills: Array<{ skill: string; jobCount: number; frequencyPercent: number }>;
+      toolsAndTechnologies: Array<{ skill: string; jobCount: number; frequencyPercent: number }>;
+      experienceRequirements: Array<{ experience: string; jobCount: number }>;
+      salaryRange: {
+        currency: string;
+        minimum: number;
+        maximum: number;
+        jobCount: number;
+      } | null;
+    };
+    atsAnalysis: {
+      score: number;
+      scoreBreakdown: Record<string, number>;
+      keywordCoverage: {
+        percentage: number | null;
+        required: string[];
+        matched: string[];
+        missing: string[];
+      };
+      missingKeywords: string[];
+      contactInformation: ResumeAnalysisResponse['atsAnalysis']['contactInformation'];
+      summaryStatus: 'missing' | 'brief' | 'present';
+      sectionChecks: Array<{ section: string; status: string }>;
+      actionVerbs: ResumeAnalysisResponse['atsAnalysis']['actionVerbs'];
+      quantifiedAchievements: ResumeAnalysisResponse['atsAnalysis']['quantifiedAchievements'];
+    } | null;
+    recommendations: Array<{
+      priority: 'HIGH' | 'MEDIUM' | 'OPTIONAL';
+      skill: string | null;
+      message: string;
+    }>;
+    bulletImprovements: Array<{
+      original: string;
+      suggestedRewrite: string;
+      guidance: string;
+    }>;
   };
   weakAreas: string[];
   improvementSuggestions: string[];

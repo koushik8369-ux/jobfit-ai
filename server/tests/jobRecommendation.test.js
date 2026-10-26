@@ -9,6 +9,7 @@ import {
   parseSkillTags,
 } from '../src/services/jobDatasetService.js';
 import { JOB_DATASET_ID } from '../src/services/jobDatasetService.js';
+import { createJobRecommendationService } from '../src/services/jobRecommendationService.js';
 import { extractAuthentication, generateToken } from '../src/utils/jwt.js';
 
 const testEnvironment = {
@@ -186,6 +187,123 @@ describe('job dataset normalization', () => {
     assert.equal(createJobPosting({ jobId: '1', tagsAndSkills: 'Java' }), null);
     assert.equal(createJobPosting({ title: 'Developer', tagsAndSkills: 'Java' }), null);
     assert.equal(createJobPosting({ title: 'Developer', jobId: '1', tagsAndSkills: '' }), null);
+  });
+});
+
+describe('role-specific job market insights', () => {
+  const roleJobs = [
+    ['Java', 'Spring Boot', 'SQL', 'Docker'],
+    ['Java', 'Spring Boot', 'SQL', 'Docker'],
+    ['Java', 'Spring Boot', 'SQL', 'Git'],
+    ['Java', 'Spring Boot', 'SQL', 'Git'],
+    ['Java', 'Spring Boot', 'SQL', 'Docker'],
+  ].map((skillNames, index) => ({
+    sourceDataset: JOB_DATASET_ID,
+    jobId: `java-role-${index}`,
+    title: 'Java Developer',
+    currency: 'INR',
+    experience: '2-4 Years',
+    minimumSalary: 1000000 + (index * 100000),
+    maximumSalary: 2000000 + (index * 100000),
+    normalizedSkills: skillNames.map(normalizeSkill),
+    skillNames,
+  }));
+
+  function roleMarketService(jobs = roleJobs, datasetAvailable = true) {
+    const jobPostingModel = {
+      async exists() {
+        return datasetAvailable ? { _id: 'available' } : null;
+      },
+      find(filter) {
+        const query = {
+          select() { return query; },
+          lean() { return query; },
+          cursor() {
+            const matches = jobs.filter((job) => job.sourceDataset === filter.sourceDataset
+              && job.normalizedSkills.some((skill) => filter.normalizedSkills.$in.includes(skill)));
+            return (async function* generate() { yield* matches; }());
+          },
+        };
+        return query;
+      },
+    };
+    return createJobRecommendationService({ jobPostingModel });
+  }
+
+  it('aggregates actual role jobs, frequent skills, gaps, experience, and reliable salary data', async () => {
+    const service = roleMarketService();
+    const insights = await service.getRoleMarketInsights({
+      targetRole: 'Java Developer',
+      resumeSkills: ['Java', 'SQL'],
+    });
+
+    assert.equal(insights.status, 'available');
+    assert.equal(insights.relevantJobCount, 5);
+    assert.equal(insights.searchBasis, 'role_profile');
+    assert.deepEqual(insights.matchedSkills, ['Java', 'SQL']);
+    assert.equal(insights.skillCoverage, Math.round((2 / insights.requiredSkills.length) * 100));
+    assert.ok(insights.missingSkills.includes('Spring Boot'));
+    assert.equal(insights.experienceRequirements[0].experience, '2-4 Years');
+    assert.deepEqual(insights.salaryRange, {
+      currency: 'INR',
+      minimum: 1000000,
+      maximum: 2300000,
+      jobCount: 5,
+    });
+  });
+
+  it('returns insufficient data rather than inventing statistics when no role jobs match', async () => {
+    const service = roleMarketService([
+      {
+        sourceDataset: JOB_DATASET_ID,
+        title: 'Data Scientist',
+        normalizedSkills: ['python'],
+        skillNames: ['Python'],
+      },
+      {
+        sourceDataset: JOB_DATASET_ID,
+        title: 'JavaScript Developer',
+        normalizedSkills: ['java'],
+        skillNames: ['Java'],
+      },
+    ]);
+    const insights = await service.getRoleMarketInsights({
+      targetRole: 'Java Developer',
+      resumeSkills: ['Java'],
+    });
+
+    assert.equal(insights.status, 'insufficient_data');
+    assert.equal(insights.relevantJobCount, 0);
+    assert.deepEqual(insights.requiredSkills, []);
+    assert.equal(insights.skillCoverage, null);
+    assert.match(insights.message, /Not enough role-matched postings/);
+  });
+
+  it('supports custom target-role names using resume-skill-indexed postings', async () => {
+    const customRoleJobs = Array.from({ length: 3 }, (_, index) => ({
+      sourceDataset: JOB_DATASET_ID,
+      title: 'Cloud Security Analyst',
+      normalizedSkills: ['java', 'sql'],
+      skillNames: ['Java', 'SQL'],
+      experience: `${index + 1} years`,
+    }));
+    const insights = await roleMarketService(customRoleJobs).getRoleMarketInsights({
+      targetRole: 'Cloud Security Analyst',
+      resumeSkills: ['Java'],
+    });
+
+    assert.equal(insights.status, 'available');
+    assert.equal(insights.searchBasis, 'detected_resume_skills');
+    assert.equal(insights.relevantJobCount, 3);
+    assert.deepEqual(insights.matchedSkills, ['Java', 'SQL'].filter((skill) => skill === 'Java'));
+  });
+
+  it('does not report market results when the dataset is unavailable', async () => {
+    const service = roleMarketService(roleJobs, false);
+    await assert.rejects(
+      service.getRoleMarketInsights({ targetRole: 'Java Developer', resumeSkills: ['Java'] }),
+      (error) => error.status === 503 && /dataset has not been imported/.test(error.message),
+    );
   });
 });
 

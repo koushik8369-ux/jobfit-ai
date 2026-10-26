@@ -104,7 +104,7 @@ function validResponseKeys(response) {
     'atsAnalysis', 'createdAt', 'detectedCertifications', 'detectedEducation',
     'detectedEmail', 'detectedExperience', 'detectedName', 'detectedPhone',
     'detectedProjects', 'detectedSkills', 'detectedSummary', 'fileName', 'fileType',
-    'id', 'improvementSuggestions', 'jobMarketInsights', 'matchScore', 'missingSections',
+    'id', 'improvementSuggestions', 'jobMarketInsights', 'jobSpecificAnalysis', 'matchScore', 'missingSections',
     'overallScore', 'scoreBreakdown', 'skillCategories', 'strongSkills', 'targetRole', 'weakAreas',
   ].sort());
 }
@@ -145,6 +145,43 @@ describe('resume analyzer API', () => {
             aggregateRating: null,
             reviewsCount: null,
           }],
+        };
+      },
+      async getRoleMarketInsights({ targetRole, resumeSkills }) {
+        const requiredSkills = targetRole.toLocaleLowerCase().includes('front')
+          ? [
+            { skill: 'JavaScript', jobCount: 5, frequencyPercent: 100, category: 'technical' },
+            { skill: 'React', jobCount: 4, frequencyPercent: 80, category: 'technical' },
+            { skill: 'SQL', jobCount: 3, frequencyPercent: 60, category: 'technical' },
+          ]
+          : [
+            { skill: 'Java', jobCount: 5, frequencyPercent: 100, category: 'technical' },
+            { skill: 'SQL', jobCount: 4, frequencyPercent: 80, category: 'technical' },
+            { skill: 'Docker', jobCount: 3, frequencyPercent: 60, category: 'tool' },
+          ];
+        const matchedSkills = requiredSkills
+          .filter(({ skill }) => resumeSkills.includes(skill))
+          .map(({ skill }) => skill);
+        const missingSkills = requiredSkills
+          .filter(({ skill }) => !matchedSkills.includes(skill))
+          .map(({ skill }) => skill);
+        return {
+          status: 'available',
+          message: null,
+          targetRole,
+          searchBasis: 'role_profile',
+          relevantJobCount: 5,
+          requiredSkills,
+          commonSkills: requiredSkills.map(({ skill, jobCount, frequencyPercent }) => ({ skill, jobCount, frequencyPercent })),
+          technicalSkills: requiredSkills.filter(({ category }) => category === 'technical')
+            .map(({ skill, jobCount, frequencyPercent }) => ({ skill, jobCount, frequencyPercent })),
+          toolsAndTechnologies: requiredSkills.filter(({ category }) => category === 'tool')
+            .map(({ skill, jobCount, frequencyPercent }) => ({ skill, jobCount, frequencyPercent })),
+          experienceRequirements: [{ experience: '2-4 Years', jobCount: 4 }],
+          salaryRange: null,
+          matchedSkills,
+          missingSkills,
+          skillCoverage: Math.round((matchedSkills.length / requiredSkills.length) * 100),
         };
       },
     };
@@ -251,10 +288,12 @@ describe('resume analyzer API', () => {
     assert.equal(response.body.fileType, 'text/plain');
     assert.equal(response.body.overallScore, 4);
     assert.equal(response.body.targetRole, 'General Software Engineer');
-    assert.equal(response.body.matchScore, 8);
+    assert.equal(response.body.matchScore, null);
     assert.deepEqual(response.body.detectedSkills, ['Java']);
     assert.equal(response.body.jobMarketInsights.status, 'available');
     assert.equal(response.body.jobMarketInsights.totalMatches, 1);
+    assert.equal(response.body.jobSpecificAnalysis.status, 'insufficient_data');
+    assert.equal(response.body.jobSpecificAnalysis.atsAnalysis.score >= 0, true);
     assert.deepEqual(response.body.jobMarketInsights.skillGaps, [{ skill: 'Docker', jobCount: 1 }]);
     assert.ok(response.body.improvementSuggestions.some((suggestion) => suggestion.includes('Docker')));
     assert.equal(resumeModel.records[0].jobMarketInsights.status, 'available');
@@ -302,10 +341,13 @@ describe('resume analyzer API', () => {
     const response = await request(app)
       .post('/api/resume/analyze')
       .set('Authorization', `Bearer ${ownerToken}`)
+      .field('targetRole', 'Java Developer')
       .attach('file', Buffer.from(BASIC_RESUME_TEXT), { filename: 'resume.txt', contentType: 'text/plain' });
 
     assert.equal(response.status, 200);
     assert.equal(response.body.jobMarketInsights.status, 'unavailable');
+    assert.equal(response.body.jobSpecificAnalysis.status, 'unavailable');
+    assert.ok(response.body.jobSpecificAnalysis.atsAnalysis);
     assert.match(response.body.jobMarketInsights.message, /dataset has not been imported/);
     assert.equal(resumeModel.records.length, 1);
     assert.equal(resumeModel.records[0].jobMarketInsights.status, 'unavailable');
@@ -326,6 +368,73 @@ describe('resume analyzer API', () => {
     assert.equal(response.body.targetRole, 'frontend developer');
     assert.equal(response.body.matchScore, 60);
     assert.deepEqual(response.body.detectedSkills, ['JavaScript', 'HTML', 'CSS', 'React', 'Git', 'REST API']);
+    assert.equal(response.body.jobSpecificAnalysis.status, 'available');
+    assert.equal(response.body.jobSpecificAnalysis.targetRole, 'frontend developer');
+    assert.equal(response.body.jobSpecificAnalysis.jobFitScore, 67);
+    assert.deepEqual(response.body.jobSpecificAnalysis.matchedSkills, ['JavaScript', 'React']);
+    assert.deepEqual(response.body.jobSpecificAnalysis.missingSkills, ['SQL']);
+  });
+
+  it('does not use the full-stack role-fit fallback for custom roles or saved legacy results', async () => {
+    const analyzed = await request(app)
+      .post('/api/resume/analyze')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .field('targetRole', 'Cloud Security Analyst')
+      .attach('file', Buffer.from('Java SQL Docker'), {
+        filename: 'custom-role.txt',
+        contentType: 'text/plain',
+      });
+
+    assert.equal(analyzed.status, 200);
+    assert.equal(analyzed.body.matchScore, null);
+    assert.equal(analyzed.body.jobSpecificAnalysis.jobFitScore, 100);
+
+    resumeModel.records[0].matchScore = 83;
+    const saved = await request(app)
+      .get(`/api/resume/${analyzed.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.matchScore, null);
+    assert.equal(saved.body.jobSpecificAnalysis.jobFitScore, 100);
+  });
+
+  it('returns job-specific gaps, explainable ATS checks, prioritized recommendations, and safe bullet structures', async () => {
+    const response = await request(app)
+      .post('/api/resume/analyze')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .field('targetRole', 'Java Developer')
+      .attach('file', Buffer.from([
+        'Asha Kumar',
+        'asha@example.com | +91 9876543210',
+        'Professional Summary',
+        'Backend developer experienced in building Java services and reliable APIs for business applications.',
+        'Skills',
+        'Java, SQL',
+        'Work Experience',
+        'Worked on Java backend services.',
+      ].join('\n')), { filename: 'java-resume.txt', contentType: 'text/plain' });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.jobSpecificAnalysis.status, 'available');
+    assert.equal(response.body.jobSpecificAnalysis.marketInsights.relevantJobCount, 5);
+    assert.equal(response.body.jobSpecificAnalysis.skillCoverage, 67);
+    assert.deepEqual(response.body.jobSpecificAnalysis.matchedSkills, ['Java', 'SQL']);
+    assert.deepEqual(response.body.jobSpecificAnalysis.missingSkills, ['Docker']);
+    assert.deepEqual(response.body.jobSpecificAnalysis.atsAnalysis.keywordCoverage.missing, ['Docker']);
+    assert.equal(
+      Object.values(response.body.jobSpecificAnalysis.atsAnalysis.scoreBreakdown)
+        .reduce((sum, score) => sum + score, 0),
+      response.body.jobSpecificAnalysis.atsAnalysis.score,
+    );
+    assert.equal(response.body.jobSpecificAnalysis.atsAnalysis.sectionChecks.some(({ section, status }) => (
+      section === 'Education' && status === 'missing'
+    )), true);
+    assert.ok(response.body.jobSpecificAnalysis.recommendations.some(({ priority, skill }) => (
+      priority === 'HIGH' && skill === 'Docker'
+    )));
+    assert.ok(response.body.jobSpecificAnalysis.bulletImprovements[0].suggestedRewrite.includes('[result you can substantiate]'));
+    assert.match(response.body.jobSpecificAnalysis.bulletImprovements[0].guidance, /verify/i);
   });
 
   it('ignores client-supplied ownership fields and stores only the authenticated owner', async () => {
@@ -556,6 +665,11 @@ describe('ResumeAnalysis Mongoose model', () => {
       matchScore: 40,
       rawText: BASIC_RESUME_TEXT,
       detectedSkills: ['Java'],
+      jobSpecificAnalysis: {
+        status: 'available',
+        targetRole: 'Java Developer',
+        skillCoverage: 80,
+      },
     });
     const response = analysis.toJSON();
 
@@ -566,6 +680,7 @@ describe('ResumeAnalysis Mongoose model', () => {
     assert.equal(ResumeAnalysis.schema.path('user').options.select, false);
     assert.equal(response.fileName, 'resume.txt');
     assert.deepEqual(response.detectedSkills, ['Java']);
+    assert.equal(response.jobSpecificAnalysis.targetRole, 'Java Developer');
     assert.equal('rawText' in response, false);
     assert.equal('user' in response, false);
     assert.equal('buffer' in response, false);

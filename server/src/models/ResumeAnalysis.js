@@ -44,6 +44,7 @@ const resumeAnalysisSchema = new mongoose.Schema({
   missingSections: { type: [String], default: [] },
   atsAnalysis: { type: mongoose.Schema.Types.Mixed, default: {} },
   jobMarketInsights: { type: mongoose.Schema.Types.Mixed, default: {} },
+  jobSpecificAnalysis: { type: mongoose.Schema.Types.Mixed, default: {} },
   weakAreas: { type: [String], default: [] },
   improvementSuggestions: { type: [String], default: [] },
 }, {
