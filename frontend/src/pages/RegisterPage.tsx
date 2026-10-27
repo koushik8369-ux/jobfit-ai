@@ -89,14 +89,14 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 px-4 py-12 selection:bg-brand-500/30 selection:text-brand-200">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-4 py-10 selection:bg-brand-500/30 selection:text-brand-200 sm:px-6">
       {/* Ambient blobs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-purple-600/10 blur-3xl" />
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-brand-600/10 blur-3xl" />
+        <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-violet-600/10 blur-3xl" />
+        <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-brand-600/10 blur-3xl" />
       </div>
 
-      <div className="relative w-full max-w-md animate-fade-in">
+      <div className="relative w-full max-w-[28rem] animate-fade-in">
         {/* Brand header */}
         <div className="mb-8 flex flex-col items-center gap-3">
           <Link
@@ -125,11 +125,13 @@ export const RegisterPage: React.FC = () => {
         </div>
 
         {/* Card */}
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 shadow-2xl rounded-2xl p-8">
+        <div className="rounded-panel border border-line bg-surface/85 p-5 shadow-surface backdrop-blur-xl sm:p-8">
           {/* Success state */}
           {success && (
             <div
               id="register-success"
+              role="status"
+              aria-live="polite"
               className="mb-5 flex items-center gap-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-sm text-emerald-300"
             >
               <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -141,6 +143,8 @@ export const RegisterPage: React.FC = () => {
           {serverError && (
             <div
               id="register-error"
+              role="alert"
+              aria-live="assertive"
               className="mb-5 flex items-start gap-3 rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-300"
             >
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -226,7 +230,7 @@ export const RegisterPage: React.FC = () => {
                   id="register-toggle-password"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-300"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -261,7 +265,7 @@ export const RegisterPage: React.FC = () => {
                   id="register-toggle-confirm"
                   onClick={() => setShowConfirm((v) => !v)}
                   aria-label={showConfirm ? 'Hide password' : 'Show password'}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-300"
                 >
                   {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
