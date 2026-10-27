@@ -32,37 +32,42 @@ export const AppLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-brand-500/30 selection:text-brand-200">
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 flex items-center justify-between gap-3">
+    <div className="flex min-h-screen flex-col bg-canvas text-slate-100">
+      <a
+        href="#main-content"
+        className="sr-only z-[60] rounded-control bg-brand-600 px-4 py-2 text-sm font-semibold text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+      >
+        Skip to main content
+      </a>
+      <header className="sticky top-0 z-50 border-b border-line bg-canvas/90 backdrop-blur-xl">
+        <div className="mx-auto flex min-h-[4.25rem] max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           {/* Brand / Logo */}
           <NavLink
             to="/"
-            className="flex items-center gap-2.5 group transition-transform duration-200 hover:scale-[1.02] shrink-0"
+            className="group flex shrink-0 items-center gap-2.5 rounded-control transition-transform duration-200 hover:scale-[1.02]"
             id="brand-logo"
           >
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-brand-500/25 ring-1 ring-white/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-control bg-gradient-to-tr from-brand-600 via-indigo-500 to-violet-500 shadow-brand-soft ring-1 ring-white/15">
               <Sparkles className="w-5 h-5 text-white animate-pulse-subtle" />
             </div>
             <div className="flex flex-col">
-              <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-brand-300 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-white to-brand-200 bg-clip-text text-lg font-bold tracking-tight text-transparent">
                 JOBFIT AI
               </span>
-              <span className="hidden md:block text-[10px] font-medium tracking-wider text-slate-400 uppercase -mt-1">
+              <span className="-mt-1 hidden text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500 md:block">
                 Career Intelligence
               </span>
             </div>
           </NavLink>
 
           {/* Auth controls */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex shrink-0 items-center gap-2">
             {user ? (
               <>
                 {/* User badge */}
                 <div
                   id="nav-user-badge"
-                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/60 text-sm text-slate-300"
+                  className="hidden items-center gap-2 rounded-control border border-line bg-surface/80 px-3 py-2 text-sm text-slate-300 sm:flex"
                 >
                   <UserCircle2 className="w-4 h-4 text-brand-400" />
                   <span className="max-w-[120px] truncate font-medium">{user.fullName}</span>
@@ -71,7 +76,7 @@ export const AppLayout: React.FC = () => {
                 <button
                   id="nav-logout-btn"
                   onClick={handleLogout}
-                  className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                  className="button-quiet text-slate-400 hover:bg-rose-500/10 hover:text-rose-200"
                   aria-label="Log out"
                 >
                   <LogOut className="w-4 h-4" />
@@ -82,9 +87,7 @@ export const AppLayout: React.FC = () => {
               <NavLink
                 to="/login"
                 id="nav-login-btn"
-                className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-sm font-semibold
-                           bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500
-                           text-white shadow-md shadow-brand-500/20 transition-all duration-200 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                className="button-primary"
               >
                 <LogIn className="w-4 h-4" />
                 <span>Login</span>
@@ -92,7 +95,7 @@ export const AppLayout: React.FC = () => {
             )}
             <button
               type="button"
-              className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700/70 text-slate-300 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              className="button-quiet h-10 w-10 p-0 lg:hidden"
               aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
               aria-expanded={isMenuOpen}
               aria-controls="main-nav"
@@ -103,11 +106,11 @@ export const AppLayout: React.FC = () => {
           </div>
         </div>
         <nav
-          className={`${isMenuOpen ? 'block' : 'hidden'} lg:block border-t border-slate-800/70`}
+          className={`${isMenuOpen ? 'block' : 'hidden'} border-t border-line bg-slate-950/70 lg:block`}
           id="main-nav"
           aria-label="Primary navigation"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:flex lg:flex-wrap lg:justify-center gap-2">
+          <div className="mx-auto grid max-w-7xl grid-cols-2 gap-1.5 px-4 py-3 sm:grid-cols-3 sm:gap-2 sm:px-6 md:grid-cols-5 lg:px-8">
             {navLinks.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
@@ -116,11 +119,7 @@ export const AppLayout: React.FC = () => {
                 end={to === '/'}
                 onClick={() => setIsMenuOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center justify-center lg:justify-start gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
-                    isActive
-                      ? 'bg-brand-500/15 text-brand-300 border border-brand-500/30 shadow-sm shadow-brand-500/10'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
-                  }`
+                  `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`
                 }
               >
                 <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -132,13 +131,12 @@ export const AppLayout: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in" id="main-content">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 animate-fade-in sm:px-6 lg:px-8" id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/60 py-6 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4">
+      <footer className="border-t border-line bg-slate-950/60 py-6 text-center text-xs text-slate-500">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p>© {new Date().getFullYear()} JOBFIT AI — AI-Powered Job Fit &amp; Career Readiness Platform</p>
         </div>
       </footer>

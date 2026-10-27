@@ -7,6 +7,16 @@ export default {
   theme: {
     extend: {
       colors: {
+        canvas: '#090d16',
+        surface: {
+          DEFAULT: '#0f172a',
+          raised: '#151f32',
+          elevated: '#1b2638',
+        },
+        line: {
+          DEFAULT: 'rgba(148, 163, 184, 0.14)',
+          strong: 'rgba(148, 163, 184, 0.22)',
+        },
         brand: {
           50: '#eef2ff',
           100: '#e0e7ff',
@@ -27,6 +37,15 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
+      borderRadius: {
+        control: '0.75rem',
+        card: '1rem',
+        panel: '1.25rem',
+      },
+      boxShadow: {
+        surface: '0 18px 48px -28px rgba(0, 0, 0, 0.72)',
+        'brand-soft': '0 10px 28px -16px rgba(99, 102, 241, 0.55)',
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-in-out',

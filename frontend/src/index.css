@@ -5,28 +5,83 @@
 @layer base {
   :root {
     color-scheme: dark;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
   }
-  
+
   body {
-    @apply bg-slate-950 text-slate-100 font-sans min-h-screen;
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.08) 0px, transparent 50%),
-      radial-gradient(at 50% 100%, rgba(59, 130, 246, 0.05) 0px, transparent 50%);
-    background-attachment: fixed;
+    @apply min-h-screen bg-canvas font-sans text-slate-100 antialiased;
+    background-image:
+      radial-gradient(ellipse at 12% 0%, rgba(99, 102, 241, 0.09), transparent 34rem),
+      radial-gradient(ellipse at 90% 8%, rgba(139, 92, 246, 0.055), transparent 30rem);
+    line-height: 1.55;
+  }
+
+  :focus-visible {
+    outline: 2px solid theme('colors.brand.300');
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    @apply bg-brand-500/30 text-brand-100;
+  }
+}
+
+@layer components {
+  .surface-panel {
+    @apply rounded-panel border border-line bg-surface/90 shadow-surface;
+  }
+
+  .surface-card {
+    @apply rounded-card border border-line bg-surface/65;
+  }
+
+  .surface-card-interactive {
+    @apply surface-card transition-colors duration-200 hover:border-line-strong hover:bg-surface-raised/80;
+  }
+
+  .button-primary {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-control border border-brand-400/20 bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-brand-soft transition-colors hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .button-secondary {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-control border border-line-strong bg-surface-raised px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-brand-400/35 hover:bg-surface-elevated hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .button-quiet {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-control border border-transparent px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-surface-raised hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
   }
 }
 
 @layer utilities {
   .glass-panel {
-    @apply bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 shadow-xl;
+    @apply rounded-panel border border-line bg-surface/75 shadow-surface backdrop-blur-xl;
   }
-  
+
   .glass-card {
-    @apply bg-slate-900/40 backdrop-blur-md border border-slate-800/60 rounded-2xl transition-all duration-300;
+    @apply rounded-card border border-line bg-surface/55 backdrop-blur-md transition-colors duration-200;
   }
 
   .glass-card-hover {
-    @apply hover:border-brand-500/40 hover:bg-slate-900/70 hover:shadow-lg hover:shadow-brand-500/10;
+    @apply hover:border-brand-500/40 hover:bg-surface-raised/80 hover:shadow-surface;
+  }
+
+  .app-nav-link {
+    @apply inline-flex min-h-10 min-w-0 items-center justify-start gap-2 rounded-control border border-transparent px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-surface-raised/80 hover:text-slate-100;
+  }
+
+  .app-nav-link-active {
+    @apply border-brand-400/25 bg-brand-500/10 text-brand-200;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
