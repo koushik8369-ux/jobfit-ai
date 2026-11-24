@@ -11,6 +11,7 @@ import { createJobIntelligenceRoutes } from './routes/jobIntelligenceRoutes.js';
 import { createCareerAssistantRoutes } from './routes/careerAssistantRoutes.js';
 import { createCareerPlanRoutes } from './routes/careerPlanRoutes.js';
 import { createJobRoutes } from './routes/jobRoutes.js';
+import { createApplicationRoutes } from './routes/applicationRoutes.js';
 
 export function createApp({
 	authDependencies,
@@ -18,6 +19,7 @@ export function createApp({
 	jobDependencies = authDependencies,
 	jobRecommendationDependencies = authDependencies,
 	careerDependencies = authDependencies,
+	applicationDependencies = authDependencies,
 } = {}) {
 	const app = express();
 
@@ -32,6 +34,7 @@ export function createApp({
 	app.use('/api/jobs', createJobRoutes(jobRecommendationDependencies));
 	app.use('/api/career-assistant', createCareerAssistantRoutes(careerDependencies));
 	app.use('/api/career-plans', createCareerPlanRoutes(careerDependencies));
+	app.use('/api/applications', createApplicationRoutes(applicationDependencies));
 	app.use(notFoundHandler);
 	app.use(errorHandler);
 
