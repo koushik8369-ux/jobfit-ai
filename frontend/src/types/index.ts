@@ -518,3 +518,79 @@ export interface CareerPlanItemUpdateRequest {
   completed?: boolean;
   status?: CareerPlanItemStatus;
 }
+
+export const APPLICATION_STATUSES = [
+  'SAVED',
+  'APPLIED',
+  'ASSESSMENT',
+  'INTERVIEW',
+  'OFFER',
+  'REJECTED',
+  'WITHDRAWN',
+] as const;
+
+export type ApplicationStatus = typeof APPLICATION_STATUSES[number];
+
+export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
+  SAVED: 'Saved',
+  APPLIED: 'Applied',
+  ASSESSMENT: 'Assessment',
+  INTERVIEW: 'Interview',
+  OFFER: 'Offer',
+  REJECTED: 'Rejected',
+  WITHDRAWN: 'Withdrawn',
+};
+
+export interface JobApplication {
+  id: string;
+  companyName: string;
+  jobTitle: string;
+  location: string | null;
+  jobDescription: string | null;
+  applicationUrl: string | null;
+  salaryRange: string | null;
+  applicationDate: string | null;
+  status: ApplicationStatus;
+  followUpDate: string | null;
+  notes: string;
+  jobAnalysisId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateJobApplicationRequest {
+  companyName: string;
+  jobTitle: string;
+  location?: string | null;
+  jobDescription?: string | null;
+  applicationUrl?: string | null;
+  salaryRange?: string | null;
+  applicationDate?: string | null;
+  status?: ApplicationStatus;
+  followUpDate?: string | null;
+  notes?: string;
+  jobAnalysisId?: string | null;
+}
+
+export type UpdateJobApplicationRequest = Partial<
+  Omit<CreateJobApplicationRequest, 'jobAnalysisId'>
+>;
+
+export interface JobApplicationListQuery {
+  status?: ApplicationStatus;
+  q?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface JobApplicationListResponse {
+  items: JobApplication[];
+  nextCursor: string | null;
+}
+
+export interface JobApplicationStats {
+  total: number;
+  byStatus: Record<ApplicationStatus, number>;
+  overdueFollowUps: number;
+  followUpsDueWithinSevenDays: number;
+}

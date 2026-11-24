@@ -16,6 +16,7 @@ import { CareerAssistantPage } from './pages/CareerAssistantPage';
 import { CareerPlanPage } from './pages/CareerPlanPage';
 import { InterviewPreparationPage } from './pages/InterviewPreparationPage';
 import { ProjectRecommendationsPage } from './pages/ProjectRecommendationsPage';
+import { JobApplicationsPage } from './pages/JobApplicationsPage';
 
 export const App: React.FC = () => {
   return (
@@ -76,6 +77,10 @@ export const App: React.FC = () => {
             <Route
               path="project-recommendations"
               element={<ProtectedRoute><ProjectRecommendationsPage /></ProtectedRoute>}
+            />
+            <Route
+              path="applications"
+              element={<ProtectedRoute><JobApplicationsPage /></ProtectedRoute>}
             />
             <Route path="about" element={<AboutPage />} />
             <Route path="*" element={<NotFoundPage />} />
