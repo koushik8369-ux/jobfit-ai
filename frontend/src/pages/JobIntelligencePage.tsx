@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
+import { Link } from 'react-router-dom';
 import { analyzeJob, getJobHistory, getRecommendedJobs } from '../services/jobIntelligenceService';
 import { analyzeResume } from '../services/resumeService';
+import { createApplication } from '../services/applicationService';
 import type {
+  CreateJobApplicationRequest,
   JobAnalysisRequest,
   JobAnalysisResponse,
   JobRecommendation,
@@ -158,6 +162,38 @@ const getRecommendationExperience = (job: JobRecommendation) => {
 
 // ── Analysis Result View ──────────────────────────────────────────────────────
 
+type ApplicationSaveFeedback = {
+  kind: 'success' | 'error';
+  message: string;
+};
+
+function applicationSaveError(error: unknown) {
+  if (!axios.isAxiosError(error)) return 'Unable to save this application. Please try again.';
+  if (!error.response) {
+    return 'Could not reach the application service. Check your connection and try again.';
+  }
+
+  const responseData = error.response.data as {
+    message?: string;
+    errors?: Record<string, string>;
+  } | undefined;
+  const validationMessage = responseData?.errors
+    ? Object.values(responseData.errors)[0]
+    : undefined;
+
+  if (error.response.status === 400) {
+    return validationMessage || responseData?.message || 'Please review the job details and try again.';
+  }
+  if (error.response.status === 401) return 'Your session expired. Please sign in again.';
+  if (error.response.status === 404) {
+    return 'This job analysis could not be found or is no longer available.';
+  }
+  if (error.response.status >= 500) {
+    return 'The application service is temporarily unavailable. Please try again.';
+  }
+  return responseData?.message || 'Unable to save this application. Please try again.';
+}
+
 const AnalysisResultView: React.FC<{
   result: JobAnalysisResponse;
   resumeAnalysis?: ResumeAnalysisResponse;
@@ -166,6 +202,9 @@ const AnalysisResultView: React.FC<{
   recommendationsError: string | null;
   onRetryRecommendations: () => void;
   onReset: () => void;
+  onSaveToApplications: () => void;
+  isSavingApplication: boolean;
+  applicationSaveFeedback?: ApplicationSaveFeedback;
 }> = ({
   result,
   resumeAnalysis,
@@ -174,6 +213,9 @@ const AnalysisResultView: React.FC<{
   recommendationsError,
   onRetryRecommendations,
   onReset,
+  onSaveToApplications,
+  isSavingApplication,
+  applicationSaveFeedback,
 }) => {
   const [openQuestionIdx, setOpenQuestionIdx] = useState<number | null>(null);
   const requiredSkills = [...new Set(result.requiredSkills)];
@@ -196,7 +238,7 @@ const AnalysisResultView: React.FC<{
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xl font-extrabold text-slate-100 flex items-center gap-2">
             <Briefcase className="w-5 h-5 text-brand-400" />
@@ -209,15 +251,55 @@ const AnalysisResultView: React.FC<{
             Analyzed {new Date(result.createdAt).toLocaleString()}
           </p>
         </div>
-        <button
-          id="job-intel-reset-btn"
-          onClick={onReset}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-700/50 transition-all"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Analyze Another
-        </button>
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+          <button
+            type="button"
+            onClick={onSaveToApplications}
+            disabled={isSavingApplication}
+            aria-busy={isSavingApplication}
+            className="inline-flex items-center gap-2 rounded-lg border border-brand-500/40 bg-brand-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSavingApplication ? (
+              <>
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" aria-hidden="true" />
+                Saving...
+              </>
+            ) : 'Save to Applications'}
+          </button>
+          <button
+            id="job-intel-reset-btn"
+            type="button"
+            onClick={onReset}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-700/50 px-3 py-2 text-xs font-semibold text-slate-400 transition-all hover:bg-slate-800 hover:text-slate-200"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Analyze Another
+          </button>
+        </div>
       </div>
+
+      {applicationSaveFeedback && (
+        <div
+          role={applicationSaveFeedback.kind === 'error' ? 'alert' : 'status'}
+          aria-live={applicationSaveFeedback.kind === 'error' ? 'assertive' : 'polite'}
+          className={`flex flex-col gap-2 rounded-xl border p-3 text-sm sm:flex-row sm:items-center sm:justify-between ${
+            applicationSaveFeedback.kind === 'success'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+          }`}
+        >
+          <span>{applicationSaveFeedback.message}</span>
+          {applicationSaveFeedback.kind === 'success' && (
+            <Link
+              to="/applications"
+              className="inline-flex items-center gap-1 self-start font-semibold text-emerald-100 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300 sm:self-auto"
+            >
+              View Applications
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          )}
+        </div>
+      )}
 
       {resumeAnalysis && (
         <section className="glass-card p-6 sm:p-8 border border-brand-500/25 space-y-6" aria-labelledby="resume-fit-heading">
@@ -903,6 +985,11 @@ export const JobIntelligencePage: React.FC = () => {
   const [history, setHistory] = useState<JobAnalysisResponse[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [savingAnalysisIds, setSavingAnalysisIds] = useState<Set<string>>(() => new Set());
+  const savingAnalysisIdsRef = useRef<Set<string>>(new Set());
+  const [applicationSaveFeedbackById, setApplicationSaveFeedbackById] = useState<
+    Map<string, ApplicationSaveFeedback>
+  >(() => new Map());
 
   useEffect(() => {
     if (activeTab === 'history') {
@@ -937,6 +1024,42 @@ export const JobIntelligencePage: React.FC = () => {
       );
     } finally {
       setRecommendationsLoading(false);
+    }
+  };
+
+  const handleSaveToApplications = async (analysis: JobAnalysisResponse) => {
+    if (savingAnalysisIdsRef.current.has(analysis.id)) return;
+
+    savingAnalysisIdsRef.current.add(analysis.id);
+    setSavingAnalysisIds(new Set(savingAnalysisIdsRef.current));
+    setApplicationSaveFeedbackById((current) => {
+      const next = new Map(current);
+      next.delete(analysis.id);
+      return next;
+    });
+
+    try {
+      const request: CreateJobApplicationRequest = {
+        companyName: analysis.companyName,
+        jobTitle: analysis.jobTitle,
+        jobDescription: analysis.rawJobDescription,
+        jobAnalysisId: analysis.id,
+      };
+      const result = await createApplication(request);
+      setApplicationSaveFeedbackById((current) => new Map(current).set(analysis.id, {
+        kind: 'success',
+        message: result.alreadyExists
+          ? 'This job is already saved in Applications.'
+          : 'Application added successfully!',
+      }));
+    } catch (saveError: unknown) {
+      setApplicationSaveFeedbackById((current) => new Map(current).set(analysis.id, {
+        kind: 'error',
+        message: applicationSaveError(saveError),
+      }));
+    } finally {
+      savingAnalysisIdsRef.current.delete(analysis.id);
+      setSavingAnalysisIds(new Set(savingAnalysisIdsRef.current));
     }
   };
 
@@ -1025,6 +1148,11 @@ export const JobIntelligencePage: React.FC = () => {
             onRetryRecommendations={() => {
               if (resumeAnalysis) void loadRecommendations(resumeAnalysis.id);
             }}
+            onSaveToApplications={() => {
+              void handleSaveToApplications(result);
+            }}
+            isSavingApplication={savingAnalysisIds.has(result.id)}
+            applicationSaveFeedback={applicationSaveFeedbackById.get(result.id)}
             onReset={() => {
               setResult(null);
               setResumeAnalysis(null);
