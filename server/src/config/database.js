@@ -21,9 +21,18 @@ export async function connectDatabase({ env = process.env, client = mongoose, lo
       autoIndex: false,
       autoCreate: false,
     });
-    logger.info('MongoDB connection established.');
+    logger.info(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      event: 'database_connected',
+    }));
   } catch (error) {
-    logger.error(`MongoDB connection failed (${error?.name || 'ConnectionError'}). Check MONGODB_URI and database availability.`);
+    logger.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      event: 'database_connection_failed',
+      errorName: typeof error?.name === 'string' ? error.name : 'ConnectionError',
+    }));
     throw new Error('MongoDB connection failed. Check MONGODB_URI and database availability.');
   }
 }

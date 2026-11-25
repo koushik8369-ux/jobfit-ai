@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import request from 'supertest';
-import app from '../src/app.js';
+import { createApp } from '../src/app.js';
 
 describe('Express foundation', () => {
+  const app = createApp();
+
   before(() => {
     process.env.NODE_ENV = 'test';
   });

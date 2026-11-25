@@ -589,15 +589,21 @@ export function createCareerAssistantService({
       return conversationResponse(conversation);
     },
 
-    async getConversations(user) {
-      const conversations = await conversationModel.find({ user: user.id }).sort({ updatedAt: -1 });
+    async getConversations(user, { page = 1, limit = 50 } = {}) {
+      const conversations = await conversationModel.find({ user: user.id })
+        .sort({ updatedAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit);
       return conversations.map(conversationResponse);
     },
 
-    async getMessages(user, conversationId) {
+    async getMessages(user, conversationId, { page = 1, limit = 50 } = {}) {
       const conversation = await getOwnedConversation(user, conversationId);
-      const messages = await messageModel.find({ conversation: conversation._id }).sort({ createdAt: 1, _id: 1 });
-      return messages.map(messageResponse);
+      const messages = await messageModel.find({ conversation: conversation._id })
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit);
+      return messages.reverse().map(messageResponse);
     },
 
     async sendMessage(user, conversationId, question) {
@@ -611,8 +617,9 @@ export function createCareerAssistantService({
       }
 
       const previousMessages = await messageModel.find({ conversation: conversation._id })
-        .sort({ createdAt: 1, _id: 1 });
-      const conversationHistory = previousMessages.slice(-10).map((message) => ({
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(10);
+      const conversationHistory = previousMessages.reverse().map((message) => ({
         role: message.role === 'USER' ? 'user' : 'assistant',
         content: typeof message.content === 'string' ? message.content.slice(0, 4000) : '',
       }));

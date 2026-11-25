@@ -68,6 +68,18 @@ describe('foundation configuration and middleware', () => {
     }), ['https://careerlens.example', 'https://www.careerlens.example']);
     assert.throws(() => getAllowedOrigins({ NODE_ENV: 'production' }), /explicit origins/);
     assert.throws(() => getAllowedOrigins({ NODE_ENV: 'production', CORS_ALLOWED_ORIGINS: '*' }), /Wildcard/);
+    assert.deepEqual(getAllowedOrigins({
+      NODE_ENV: 'production',
+      CORS_ALLOWED_ORIGINS: 'https://careerlens.example/',
+    }), ['https://careerlens.example']);
+    assert.throws(() => getAllowedOrigins({
+      NODE_ENV: 'production',
+      CORS_ALLOWED_ORIGINS: 'http://careerlens.example',
+    }), /must use HTTPS/);
+    assert.throws(() => getAllowedOrigins({
+      NODE_ENV: 'production',
+      CORS_ALLOWED_ORIGINS: 'https://careerlens.example/path',
+    }), /without credentials, paths/);
   });
 
   it('returns JSON errors without exposing internal messages or stacks', () => {

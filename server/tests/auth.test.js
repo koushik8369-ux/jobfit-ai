@@ -15,7 +15,7 @@ const testEnvironment = {
 const registrationPassword = randomBytes(18).toString('base64url');
 const incorrectPassword = randomBytes(18).toString('base64url');
 const mismatchedConfirmation = randomBytes(18).toString('base64url');
-const shortTestPassword = 'x'.repeat(5);
+const shortTestPassword = 'x'.repeat(11);
 
 function createFakeUserModel() {
   const users = new Map();
@@ -143,9 +143,39 @@ describe('authentication API', () => {
     });
 
     assertSafeError(shortPasswordResponse, 400);
-    assert.equal(shortPasswordResponse.body.errors.password, 'Password must be at least 6 characters long');
+    assert.equal(shortPasswordResponse.body.errors.password, 'Password must be at least 12 characters long');
     assertSafeError(mismatchedPassword, 400);
     assert.equal(mismatchedPassword.body.errors.confirmPassword, 'Passwords do not match');
+  });
+
+  it('rejects registration passwords that exceed bcrypt UTF-8 limits', async () => {
+    const longUtf8Password = '🔐'.repeat(19);
+    const response = await request(app).post('/api/auth/register').send({
+      ...registration,
+      password: longUtf8Password,
+      confirmPassword: longUtf8Password,
+    });
+
+    assertSafeError(response, 400);
+    assert.equal(response.body.errors.password, 'Password must not exceed 72 UTF-8 bytes');
+  });
+
+  it('continues to accept existing accounts with passwords shorter than the new registration minimum', async () => {
+    const password = 'legacy7';
+    await userModel.create({
+      fullName: 'Existing User',
+      email: 'existing@example.com',
+      passwordHash: await bcrypt.hash(password, 10),
+      role: 'USER',
+    });
+
+    const response = await request(app).post('/api/auth/login').send({
+      email: 'existing@example.com',
+      password,
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.email, 'existing@example.com');
   });
 
   it('logs in with a normalized email and returns an email-subject JWT with role', async () => {

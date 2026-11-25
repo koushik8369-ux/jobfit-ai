@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { beforeEach, describe, it } from 'node:test';
+import { deflateRawSync } from 'node:zlib';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import ResumeAnalysis from '../src/models/ResumeAnalysis.js';
-import { MAX_RESUME_SIZE_BYTES, createResumeParserService } from '../src/services/resumeParserService.js';
+import {
+  MAX_DOCX_ARCHIVE_ENTRIES,
+  MAX_DOCX_ENTRY_SIZE_BYTES,
+  MAX_DOCX_UNCOMPRESSED_SIZE_BYTES,
+  MAX_RESUME_SIZE_BYTES,
+  createResumeParserService,
+} from '../src/services/resumeParserService.js';
 import { extractAuthentication, generateToken } from '../src/utils/jwt.js';
 
 const testEnvironment = {
@@ -37,6 +44,95 @@ function createPdfBuffer() {
   });
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
   return Buffer.from(pdf, 'ascii');
+}
+
+const TEST_CRC32_TABLE = Array.from({ length: 256 }, (_value, index) => {
+  let crc = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    crc = (crc & 1) ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+  }
+  return crc >>> 0;
+});
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = (crc >>> 8) ^ TEST_CRC32_TABLE[(crc ^ byte) & 0xff];
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function createZipBuffer(entries) {
+  const localRecords = [];
+  const centralRecords = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name);
+    const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data ?? '');
+    const compressed = entry.compress === false ? data : deflateRawSync(data);
+    const method = entry.compress === false ? 0 : 8;
+    const checksum = crc32(data);
+    const declaredSize = entry.uncompressedSize ?? data.length;
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(method, 8);
+    localHeader.writeUInt32LE(checksum, 14);
+    localHeader.writeUInt32LE(compressed.length, 18);
+    localHeader.writeUInt32LE(declaredSize, 22);
+    localHeader.writeUInt16LE(name.length, 26);
+    localRecords.push(localHeader, name, compressed);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(method, 10);
+    centralHeader.writeUInt32LE(checksum, 16);
+    centralHeader.writeUInt32LE(compressed.length, 20);
+    centralHeader.writeUInt32LE(declaredSize, 24);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralRecords.push(centralHeader, name);
+    offset += localHeader.length + name.length + compressed.length;
+  }
+
+  const centralDirectory = Buffer.concat(centralRecords);
+  const endRecord = Buffer.alloc(22);
+  endRecord.writeUInt32LE(0x06054b50, 0);
+  endRecord.writeUInt16LE(entries.length, 8);
+  endRecord.writeUInt16LE(entries.length, 10);
+  endRecord.writeUInt32LE(centralDirectory.length, 12);
+  endRecord.writeUInt32LE(offset, 16);
+  return Buffer.concat([...localRecords, centralDirectory, endRecord]);
+}
+
+function createValidDocxBuffer() {
+  return createZipBuffer([
+    {
+      name: '[Content_Types].xml',
+      data: '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+    },
+    {
+      name: '_rels/.rels',
+      data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+    },
+    {
+      name: 'word/document.xml',
+      data: '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Valid document body</w:t></w:r></w:p><w:sectPr/></w:body></w:document>',
+    },
+  ]);
+}
+
+function createModeratelyCompressedBuffer(size) {
+  const result = Buffer.alloc(size);
+  const randomBlock = randomBytes(32 * 1024);
+  const blockSize = 1024 * 1024;
+  for (let offset = 0; offset < size; offset += blockSize) {
+    randomBlock.copy(result, offset, 0, Math.min(randomBlock.length, size - offset));
+  }
+  return result;
 }
 
 function createUserModel() {
@@ -553,6 +649,120 @@ describe('resume document parser', () => {
     assert.match(result.text, /Java/);
   });
 
+  it('extracts text from a valid DOCX after inspecting its archive', async () => {
+    const parser = createResumeParserService();
+    const result = await parser.extractText({
+      originalname: 'valid.docx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer: createValidDocxBuffer(),
+    });
+
+    assert.equal(result.text, 'Valid document body');
+  });
+
+  it('rejects malformed ZIP archives before invoking the DOCX extractor', async () => {
+    let extractorCalled = false;
+    const parser = createResumeParserService({
+      extractors: {
+        async docx() {
+          extractorCalled = true;
+          return 'unexpected';
+        },
+      },
+    });
+
+    await assert.rejects(parser.extractText({
+      originalname: 'malformed.docx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00]),
+    }), (error) => {
+      assert.equal(error.status, 400);
+      assert.equal(error.message, 'The uploaded document could not be parsed.');
+      return true;
+    });
+    assert.equal(extractorCalled, false);
+  });
+
+  it('rejects DOCX archives with excessive entry counts', async () => {
+    const parser = createResumeParserService({
+      extractors: { async docx() { throw new Error('extractor must not run'); } },
+    });
+    const buffer = createZipBuffer(Array.from(
+      { length: MAX_DOCX_ARCHIVE_ENTRIES + 1 },
+      (_entry, index) => ({ name: `entry-${index}.xml`, data: '' }),
+    ));
+
+    await assert.rejects(parser.extractText({
+      originalname: 'many-entries.docx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer,
+    }), (error) => {
+      assert.equal(error.status, 413);
+      assert.equal(error.message, 'The DOCX archive exceeds supported processing limits.');
+      return true;
+    });
+  });
+
+  it('rejects an oversized individual DOCX entry', async () => {
+    const parser = createResumeParserService({
+      extractors: { async docx() { throw new Error('extractor must not run'); } },
+    });
+    const buffer = createZipBuffer([{
+      name: 'word/document.xml',
+      data: 'small',
+      uncompressedSize: MAX_DOCX_ENTRY_SIZE_BYTES + 1,
+    }]);
+
+    await assert.rejects(parser.extractText({
+      originalname: 'large-entry.docx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer,
+    }), (error) => {
+      assert.equal(error.status, 413);
+      return true;
+    });
+  });
+
+  it('rejects total uncompressed DOCX data above the archive limit', async () => {
+    const parser = createResumeParserService({
+      extractors: { async docx() { throw new Error('extractor must not run'); } },
+    });
+    const entrySize = Math.ceil(MAX_DOCX_UNCOMPRESSED_SIZE_BYTES / 2) + 1;
+    const buffer = createZipBuffer([
+      { name: 'word/document-a.xml', data: createModeratelyCompressedBuffer(entrySize) },
+      { name: 'word/document-b.xml', data: createModeratelyCompressedBuffer(entrySize) },
+    ]);
+
+    await assert.rejects(parser.extractText({
+      originalname: 'large-archive.docx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer,
+    }), (error) => {
+      assert.equal(error.status, 413);
+      return true;
+    });
+    assert.ok(buffer.length < MAX_RESUME_SIZE_BYTES);
+  });
+
+  it('rejects DOCX entries with suspicious compression ratios', async () => {
+    const parser = createResumeParserService({
+      extractors: { async docx() { throw new Error('extractor must not run'); } },
+    });
+    const buffer = createZipBuffer([{
+      name: 'word/document.xml',
+      data: Buffer.alloc(2 * 1024 * 1024),
+    }]);
+
+    await assert.rejects(parser.extractText({
+      originalname: 'compressed.docx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer,
+    }), (error) => {
+      assert.equal(error.status, 413);
+      return true;
+    });
+  });
+
   it('maps malformed DOCX and DOC parser failures to safe client errors', async () => {
     const parser = createResumeParserService();
     const malformedFiles = [
@@ -599,7 +809,7 @@ describe('resume document parser', () => {
     const docx = await parser.extractText({
       originalname: 'resume.docx',
       mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      buffer: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00]),
+      buffer: createValidDocxBuffer(),
     });
     const doc = await parser.extractText({
       originalname: 'resume.doc',

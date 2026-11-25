@@ -32,8 +32,10 @@ const validateForm = (form: FormState): FieldErrors => {
     errors.fullName = 'Full name must be at least 2 characters.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
     errors.email = 'Please enter a valid email address.';
-  if (form.password.length < 6)
-    errors.password = 'Password must be at least 6 characters.';
+  if (form.password.length < 12)
+    errors.password = 'Password must be at least 12 characters.';
+  else if (new TextEncoder().encode(form.password).length > 72)
+    errors.password = 'Password must not exceed 72 UTF-8 bytes.';
   if (form.password !== form.confirmPassword)
     errors.confirmPassword = 'Passwords do not match.';
   return errors;
@@ -89,7 +91,7 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-4 py-10 selection:bg-brand-500/30 selection:text-brand-200 sm:px-6">
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-4 py-10 selection:bg-brand-500/30 selection:text-brand-200 sm:px-6">
       {/* Ambient blobs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-violet-600/10 blur-3xl" />
@@ -220,7 +222,7 @@ export const RegisterPage: React.FC = () => {
                   required
                   value={form.password}
                   onChange={handleChange}
-                  placeholder="Min. 6 characters"
+                  placeholder="At least 12 characters"
                   className={`w-full bg-slate-800/60 border rounded-xl pl-10 pr-11 py-2.5 text-sm text-slate-100 placeholder-slate-500
                     focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/60 transition-all duration-200
                     ${fieldErrors.password ? 'border-red-500/60' : 'border-slate-700/80'}`}
@@ -310,7 +312,7 @@ export const RegisterPage: React.FC = () => {
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 };
 

@@ -9,6 +9,10 @@ interface CareerChatProps {
   isSending: boolean;
   error: string | null;
   onSend: (question: string) => Promise<boolean>;
+  hasOlderMessages: boolean;
+  isLoadingOlderMessages: boolean;
+  olderMessagesError: string | null;
+  onLoadOlderMessages: () => void;
 }
 
 const STARTER_PROMPTS = [
@@ -25,6 +29,10 @@ export const CareerChat: React.FC<CareerChatProps> = ({
   isSending,
   error,
   onSend,
+  hasOlderMessages,
+  isLoadingOlderMessages,
+  olderMessagesError,
+  onLoadOlderMessages,
 }) => {
   const [question, setQuestion] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -50,6 +58,21 @@ export const CareerChat: React.FC<CareerChatProps> = ({
       </header>
 
       <div className="flex-1 min-h-[360px] max-h-[58vh] overflow-y-auto p-5 space-y-4">
+        {hasOlderMessages && (
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={onLoadOlderMessages}
+              disabled={isLoadingOlderMessages}
+              className="rounded-full border border-slate-700 px-4 py-2 text-xs text-brand-300 hover:bg-slate-800/70 disabled:opacity-50"
+            >
+              {isLoadingOlderMessages
+                ? 'Loading older messages...'
+                : olderMessagesError ? 'Retry loading older messages' : 'Load older messages'}
+            </button>
+            {olderMessagesError && <p className="text-sm text-rose-300" role="alert">{olderMessagesError}</p>}
+          </div>
+        )}
         {isLoading && <p className="text-sm text-slate-400 text-center py-8">Loading messages...</p>}
         {!isLoading && messages.length === 0 && (
           <div className="min-h-[280px] flex flex-col items-center justify-center text-center">

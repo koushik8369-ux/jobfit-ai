@@ -13,17 +13,22 @@ import type {
 } from '../types';
 import { loginUser, registerUser } from '../services/authService';
 import { AUTH_SESSION_INVALIDATED_EVENT } from '../services/api';
+import {
+  clearStoredAuthSession,
+  getStoredAuthSession,
+  setStoredAuthSession,
+} from '../services/authSession';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface AuthContextValue {
   /** Currently authenticated user, or null if unauthenticated. */
   user: AuthUser | null;
-  /** True while the initial localStorage restore is in progress. */
+  /** True while the initial session restore is in progress. */
   isLoading: boolean;
-  /** Authenticate with the backend; persists user to localStorage on success. */
+  /** Authenticate with the backend; keeps the session only for this browser tab. */
   login: (data: LoginRequest) => Promise<void>;
-  /** Clear session from state and localStorage. */
+  /** Clear session from state and browser storage. */
   logout: () => void;
   /** Register a new account; returns the created user record. */
   register: (data: RegisterRequest) => Promise<UserResponse>;
@@ -33,8 +38,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const STORAGE_KEY = 'careerlens_session';
-
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
@@ -43,20 +46,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore session from localStorage on first mount
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const session = JSON.parse(raw) as { user?: AuthUser; token?: string };
-        if (session.user && session.token) {
-          setUser(session.user);
-        } else {
-          localStorage.removeItem(STORAGE_KEY);
-        }
+      const session = getStoredAuthSession();
+      if (session) {
+        setUser(session.user);
       }
     } catch {
-      localStorage.removeItem(STORAGE_KEY);
+      clearStoredAuthSession();
     } finally {
       setIsLoading(false);
     }
@@ -65,7 +62,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     const handleInvalidSession = () => {
       setUser(null);
-      localStorage.removeItem(STORAGE_KEY);
+      clearStoredAuthSession();
     };
 
     window.addEventListener(AUTH_SESSION_INVALIDATED_EVENT, handleInvalidSession);
@@ -80,14 +77,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       email: response.email,
       role: response.role,
     };
+    setStoredAuthSession({ user: authUser, token: response.token });
     setUser(authUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: authUser, token: response.token }));
   };
 
   const logout = (): void => {
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem('careerlens_user');
+    clearStoredAuthSession();
   };
 
   const register = async (data: RegisterRequest): Promise<UserResponse> => {

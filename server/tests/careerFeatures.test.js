@@ -142,13 +142,34 @@ function createCareerModels() {
       return record;
     },
     find({ user }) {
-      return {
-        sort() {
-          return Promise.resolve(conversations
-            .filter((record) => String(record.user) === String(user))
-            .sort((left, right) => right.updatedAt - left.updatedAt));
+      let result = conversations.filter((record) => String(record.user) === String(user));
+      const query = {
+        sort(order) {
+          result = [...result].sort((left, right) => {
+            const updatedAtOrder = (left.updatedAt - right.updatedAt)
+              * (order.updatedAt === -1 ? -1 : 1);
+            if (updatedAtOrder !== 0) return updatedAtOrder;
+
+            const leftId = String(left._id);
+            const rightId = String(right._id);
+            const idOrder = leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+            return idOrder * (order._id === -1 ? -1 : 1);
+          });
+          return query;
+        },
+        skip(count) {
+          result = result.slice(count);
+          return query;
+        },
+        limit(count) {
+          result = result.slice(0, count);
+          return query;
+        },
+        then(resolve, reject) {
+          return Promise.resolve(result).then(resolve, reject);
         },
       };
+      return query;
     },
     findOne(criteria) {
       return Promise.resolve(conversations.find((record) => (
@@ -170,13 +191,28 @@ function createCareerModels() {
       return record;
     },
     find({ conversation }) {
-      return {
-        sort() {
-          return Promise.resolve(messages
-            .filter((message) => String(message.conversation) === String(conversation))
-            .sort((left, right) => left.createdAt - right.createdAt));
+      let result = messages.filter((message) => String(message.conversation) === String(conversation));
+      const query = {
+        sort(order) {
+          const descending = order.createdAt === -1;
+          result = [...result].sort((left, right) => (
+            (left.createdAt - right.createdAt) * (descending ? -1 : 1)
+          ));
+          return query;
+        },
+        skip(count) {
+          result = result.slice(count);
+          return query;
+        },
+        limit(count) {
+          result = result.slice(0, count);
+          return query;
+        },
+        then(resolve, reject) {
+          return Promise.resolve(result).then(resolve, reject);
         },
       };
+      return query;
     },
   };
   const planModel = {
@@ -290,6 +326,59 @@ describe('Career Assistant and Plan APIs', () => {
     assert.equal(response.body.some((conversation) => conversation.email), false);
   });
 
+  it('paginates conversation history in update order and enforces page bounds', async () => {
+    const first = await request(app)
+      .post('/api/career-assistant/conversations')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    const second = await request(app)
+      .post('/api/career-assistant/conversations')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    const third = await request(app)
+      .post('/api/career-assistant/conversations')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    const pageOne = await request(app)
+      .get('/api/career-assistant/conversations?page=1&limit=2')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    const pageTwo = await request(app)
+      .get('/api/career-assistant/conversations?page=2&limit=2')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    const invalidPage = await request(app)
+      .get('/api/career-assistant/conversations?page=1001')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    const invalidLimit = await request(app)
+      .get('/api/career-assistant/conversations?limit=101')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    assert.deepEqual(pageOne.body.map((conversation) => conversation.id), [third.body.id, second.body.id]);
+    assert.deepEqual(pageTwo.body.map((conversation) => conversation.id), [first.body.id]);
+    assert.equal(new Set([...pageOne.body, ...pageTwo.body].map((conversation) => conversation.id)).size, 3);
+    safeError(invalidPage, 400);
+    safeError(invalidLimit, 400);
+  });
+
+  it('orders conversations with tied update timestamps deterministically across pages', async () => {
+    const created = [];
+    for (let index = 0; index < 5; index += 1) {
+      created.push(await request(app)
+        .post('/api/career-assistant/conversations')
+        .set('Authorization', `Bearer ${ownerToken}`));
+    }
+
+    const sharedTimestamp = new Date('2025-03-01T12:00:00.000Z');
+    for (const conversation of models.conversationModel.records) {
+      conversation.updatedAt = sharedTimestamp;
+    }
+
+    const pages = await Promise.all([1, 2, 3].map((page) => request(app)
+      .get(`/api/career-assistant/conversations?page=${page}&limit=2`)
+      .set('Authorization', `Bearer ${ownerToken}`)));
+    const pageIds = pages.flatMap((page) => page.body.map((conversation) => conversation.id));
+
+    assert.deepEqual(pageIds, created.map((response) => response.body.id).reverse());
+    assert.equal(new Set(pageIds).size, created.length);
+  });
+
   it('persists both message roles, returns the assistant message, and updates conversation title', async () => {
     const conversation = await request(app)
       .post('/api/career-assistant/conversations')
@@ -383,6 +472,18 @@ describe('Career Assistant and Plan APIs', () => {
     const messages = await request(app)
       .get(`/api/career-assistant/conversations/${conversation.body.id}/messages`)
       .set('Authorization', `Bearer ${ownerToken}`);
+    const secondPage = await request(app)
+      .get(`/api/career-assistant/conversations/${conversation.body.id}/messages?page=2&limit=2`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    const invalidPage = await request(app)
+      .get(`/api/career-assistant/conversations/${conversation.body.id}/messages?page=0`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    const excessivePage = await request(app)
+      .get(`/api/career-assistant/conversations/${conversation.body.id}/messages?page=1001`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    const excessiveLimit = await request(app)
+      .get(`/api/career-assistant/conversations/${conversation.body.id}/messages?limit=101`)
+      .set('Authorization', `Bearer ${ownerToken}`);
     const foreign = await request(app)
       .get(`/api/career-assistant/conversations/${conversation.body.id}/messages`)
       .set('Authorization', `Bearer ${otherToken}`);
@@ -393,6 +494,13 @@ describe('Career Assistant and Plan APIs', () => {
       'What should I learn?',
       'How can I practice those skills?',
     ]);
+    assert.deepEqual(secondPage.body.map((message) => message.role), ['USER', 'ASSISTANT']);
+    assert.deepEqual(secondPage.body.filter((message) => message.role === 'USER').map((message) => message.content), [
+      'What should I learn?',
+    ]);
+    safeError(invalidPage, 400);
+    safeError(excessivePage, 400);
+    safeError(excessiveLimit, 400);
     safeError(foreign, 404);
   });
 

@@ -16,19 +16,51 @@ import type {
 } from '../types';
 
 const CAREER_AI_REQUEST_TIMEOUT_MS = 35_000;
+export const CAREER_ASSISTANT_HISTORY_PAGE_SIZE = 50;
+export const CAREER_ASSISTANT_MAX_HISTORY_PAGE = 1000;
+const CAREER_ASSISTANT_MAX_HISTORY_LIMIT = 100;
+
+export interface CareerAssistantHistoryPage {
+  page: number;
+  limit: number;
+}
+
+function historyPageParams({ page, limit }: CareerAssistantHistoryPage): CareerAssistantHistoryPage {
+  if (!Number.isSafeInteger(page) || page < 1 || page > CAREER_ASSISTANT_MAX_HISTORY_PAGE
+      || !Number.isSafeInteger(limit) || limit < 1 || limit > CAREER_ASSISTANT_MAX_HISTORY_LIMIT) {
+    throw new RangeError('Career Assistant history pagination is outside the supported bounds.');
+  }
+  return { page, limit };
+}
 
 export const createCareerAssistantConversation = async (): Promise<CareerAssistantConversation> => {
   const response = await api.post<CareerAssistantConversation>('/career-assistant/conversations');
   return response.data;
 };
 
-export const getCareerAssistantConversations = async (): Promise<CareerAssistantConversation[]> => {
-  const response = await api.get<CareerAssistantConversation[]>('/career-assistant/conversations');
+export const getCareerAssistantConversations = async (
+  pagination: CareerAssistantHistoryPage = {
+    page: 1,
+    limit: CAREER_ASSISTANT_HISTORY_PAGE_SIZE,
+  },
+): Promise<CareerAssistantConversation[]> => {
+  const response = await api.get<CareerAssistantConversation[]>('/career-assistant/conversations', {
+    params: historyPageParams(pagination),
+  });
   return response.data;
 };
 
-export const getCareerAssistantMessages = async (conversationId: string): Promise<CareerAssistantMessage[]> => {
-  const response = await api.get<CareerAssistantMessage[]>(`/career-assistant/conversations/${conversationId}/messages`);
+export const getCareerAssistantMessages = async (
+  conversationId: string,
+  pagination: CareerAssistantHistoryPage = {
+    page: 1,
+    limit: CAREER_ASSISTANT_HISTORY_PAGE_SIZE,
+  },
+): Promise<CareerAssistantMessage[]> => {
+  const response = await api.get<CareerAssistantMessage[]>(
+    `/career-assistant/conversations/${conversationId}/messages`,
+    { params: historyPageParams(pagination) },
+  );
   return response.data;
 };
 

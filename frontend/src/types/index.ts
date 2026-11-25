@@ -41,7 +41,7 @@ export interface UserResponse extends User {
   createdAt: string;
 }
 
-/** Runtime authenticated user stored in AuthContext / localStorage. */
+/** Runtime authenticated user stored in AuthContext / browser session storage. */
 export type AuthUser = User;
 
 export interface AuthSession {

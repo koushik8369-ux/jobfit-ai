@@ -5,13 +5,14 @@ import type {
   UserProfileRequest,
   UserProfileResponse,
 } from '../types';
+import { clearStoredAuthSession, getStoredAuthSession } from './authSession';
 
 export const AUTH_SESSION_INVALIDATED_EVENT = 'careerlens:auth-session-invalidated';
 
 const api = axios.create({
   baseURL: import.meta.env.DEV
     ? '/api'
-    : import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+    : import.meta.env.VITE_API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -19,16 +20,14 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const session = localStorage.getItem('careerlens_session');
-  if (session) {
-    try {
-      const { token } = JSON.parse(session) as { token?: string };
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch {
-      localStorage.removeItem('careerlens_session');
+  try {
+    const session = getStoredAuthSession();
+    if (session) {
+      config.headers.Authorization = `Bearer ${session.token}`;
     }
+  } catch {
+    clearStoredAuthSession();
+    return Promise.reject(new Error('The saved authentication session could not be read.'));
   }
   return config;
 });
@@ -37,7 +36,7 @@ api.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
     if (axios.isAxiosError(error) && error.response?.status === 401) {
-      localStorage.removeItem('careerlens_session');
+      clearStoredAuthSession();
       window.dispatchEvent(new Event(AUTH_SESSION_INVALIDATED_EVENT));
     }
     return Promise.reject(error);

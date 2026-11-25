@@ -11,14 +11,21 @@ export function createCareerAssistantController({ service = createCareerAssistan
     },
     async getConversations(request, response, next) {
       try {
-        return response.status(200).json(await service.getConversations(request.user));
+        return response.status(200).json(await service.getConversations(
+          request.user,
+          request.pagination,
+        ));
       } catch (error) {
         return next(error);
       }
     },
     async getMessages(request, response, next) {
       try {
-        return response.status(200).json(await service.getMessages(request.user, request.params.conversationId));
+        return response.status(200).json(await service.getMessages(
+          request.user,
+          request.params.conversationId,
+          request.pagination,
+        ));
       } catch (error) {
         return next(error);
       }

@@ -13,7 +13,9 @@ const registrationRules = [
   body('password')
     .isString().withMessage('Password is required').bail()
     .custom((password) => password.trim().length > 0).withMessage('Password is required').bail()
-    .isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+    .isLength({ min: 12 }).withMessage('Password must be at least 12 characters long').bail()
+    .custom((password) => Buffer.byteLength(password, 'utf8') <= 72)
+    .withMessage('Password must not exceed 72 UTF-8 bytes'),
   body('confirmPassword')
     .isString().withMessage('Confirm password is required').bail()
     .custom((password) => password.trim().length > 0).withMessage('Confirm password is required').bail()

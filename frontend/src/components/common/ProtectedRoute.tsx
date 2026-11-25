@@ -11,7 +11,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
-  // Still restoring session from localStorage — show a centred spinner
+  // Still restoring the browser-tab session — show a centred spinner
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">

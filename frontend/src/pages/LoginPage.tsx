@@ -40,7 +40,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-4 py-10 selection:bg-brand-500/30 selection:text-brand-200 sm:px-6">
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-4 py-10 selection:bg-brand-500/30 selection:text-brand-200 sm:px-6">
       {/* Ambient background blobs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-brand-600/10 blur-3xl" />
@@ -193,7 +193,7 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 };
 

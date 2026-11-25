@@ -7,6 +7,8 @@ import { CareerAiToolSection } from '../components/career/CareerAiToolSection';
 import { ProjectRecommendationCards } from '../components/career/ProjectRecommendationCards';
 import {
   createCareerAssistantConversation,
+  CAREER_ASSISTANT_HISTORY_PAGE_SIZE,
+  CAREER_ASSISTANT_MAX_HISTORY_PAGE,
   generateCareerActionPlan,
   generateProjectRecommendations,
   generateSkillRoadmap,
@@ -39,8 +41,17 @@ export const CareerAssistantPage: React.FC = () => {
   const [selected, setSelected] = useState<CareerAssistantConversation | null>(null);
   const [messages, setMessages] = useState<CareerAssistantMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [conversationsError, setConversationsError] = useState<string | null>(null);
+  const [olderConversationsError, setOlderConversationsError] = useState<string | null>(null);
+  const [conversationPage, setConversationPage] = useState(1);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
+  const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
   const [isCreatingConversation, setIsCreatingConversation] = useState(false);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+  const [messagePage, setMessagePage] = useState(1);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const [olderMessagesError, setOlderMessagesError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isImprovementLoading, setIsImprovementLoading] = useState(false);
   const [resumeImprovement, setResumeImprovement] = useState<ResumeImprovementResult | null>(null);
@@ -62,13 +73,18 @@ export const CareerAssistantPage: React.FC = () => {
 
   const loadConversations = async () => {
     setIsLoading(true);
-    setError(null);
+    setConversationsError(null);
     try {
-      const result = await getCareerAssistantConversations();
+      const result = await getCareerAssistantConversations({
+        page: 1,
+        limit: CAREER_ASSISTANT_HISTORY_PAGE_SIZE,
+      });
       setConversations(result);
+      setConversationPage(1);
+      setHasMoreConversations(result.length === CAREER_ASSISTANT_HISTORY_PAGE_SIZE);
       if (result.length > 0) setSelected((current) => result.find((item) => item.id === current?.id) ?? result[0]);
     } catch (err: unknown) {
-      setError(errorMessage(err, 'Unable to load your conversations.'));
+      setConversationsError(errorMessage(err, 'Unable to load your conversations.'));
     } finally {
       setIsLoading(false);
     }
@@ -76,20 +92,95 @@ export const CareerAssistantPage: React.FC = () => {
 
   useEffect(() => { void loadConversations(); }, []);
 
+  const loadOlderConversations = async () => {
+    if (!hasMoreConversations || isLoadingMoreConversations) return;
+    const page = conversationPage + 1;
+    setIsLoadingMoreConversations(true);
+    setOlderConversationsError(null);
+    try {
+      const older = await getCareerAssistantConversations({
+        page,
+        limit: CAREER_ASSISTANT_HISTORY_PAGE_SIZE,
+      });
+      setConversations((current) => {
+        const existingIds = new Set(current.map((conversation) => conversation.id));
+        return [
+          ...current,
+          ...older.filter((conversation) => !existingIds.has(conversation.id)),
+        ];
+      });
+      setConversationPage(page);
+      setHasMoreConversations(
+        older.length === CAREER_ASSISTANT_HISTORY_PAGE_SIZE
+        && page < CAREER_ASSISTANT_MAX_HISTORY_PAGE,
+      );
+    } catch (err: unknown) {
+      setOlderConversationsError(errorMessage(err, 'Unable to load older conversations.'));
+    } finally {
+      setIsLoadingMoreConversations(false);
+    }
+  };
+
   useEffect(() => {
-    if (!selected) { setMessages([]); return; }
+    setMessages([]);
+    setMessagePage(1);
+    setHasMoreMessages(false);
+    setIsLoadingOlderMessages(false);
+    setOlderMessagesError(null);
+    if (!selected) return;
     let mounted = true;
     const requestSequence = ++messageLoadSequence.current;
     setIsMessagesLoading(true);
     setError(null);
-    getCareerAssistantMessages(selected.id)
+    getCareerAssistantMessages(selected.id, {
+      page: 1,
+      limit: CAREER_ASSISTANT_HISTORY_PAGE_SIZE,
+    })
       .then((result) => {
-        if (mounted && requestSequence === messageLoadSequence.current) setMessages(result);
+        if (mounted && requestSequence === messageLoadSequence.current) {
+          setMessages(result);
+          setMessagePage(1);
+          setHasMoreMessages(result.length === CAREER_ASSISTANT_HISTORY_PAGE_SIZE);
+        }
       })
       .catch((err: unknown) => { if (mounted) setError(errorMessage(err, 'Unable to load messages.')); })
       .finally(() => { if (mounted) setIsMessagesLoading(false); });
     return () => { mounted = false; };
   }, [selected]);
+
+  const loadOlderMessages = async () => {
+    if (!selected || !hasMoreMessages || isLoadingOlderMessages) return;
+    const conversationId = selected.id;
+    const requestSequence = messageLoadSequence.current;
+    const page = messagePage + 1;
+    setIsLoadingOlderMessages(true);
+    setOlderMessagesError(null);
+    try {
+      const older = await getCareerAssistantMessages(conversationId, {
+        page,
+        limit: CAREER_ASSISTANT_HISTORY_PAGE_SIZE,
+      });
+      if (requestSequence !== messageLoadSequence.current) return;
+      setMessages((current) => {
+        const existingIds = new Set(current.map((message) => message.id));
+        return [
+          ...older.filter((message) => !existingIds.has(message.id)),
+          ...current,
+        ];
+      });
+      setMessagePage(page);
+      setHasMoreMessages(
+        older.length === CAREER_ASSISTANT_HISTORY_PAGE_SIZE
+        && page < CAREER_ASSISTANT_MAX_HISTORY_PAGE,
+      );
+    } catch (err: unknown) {
+      if (requestSequence === messageLoadSequence.current) {
+        setOlderMessagesError(errorMessage(err, 'Unable to load older messages.'));
+      }
+    } finally {
+      if (requestSequence === messageLoadSequence.current) setIsLoadingOlderMessages(false);
+    }
+  };
 
   const handleNewConversation = async () => {
     setIsCreatingConversation(true);
@@ -122,6 +213,7 @@ export const CareerAssistantPage: React.FC = () => {
         assistantMessage,
       ]);
       messageLoadSequence.current += 1;
+      setIsLoadingOlderMessages(false);
       setConversations((current) => current
         .map((item) => item.id === activeConversation.id
           ? {
@@ -217,12 +309,48 @@ export const CareerAssistantPage: React.FC = () => {
         <aside className="glass-card p-3 lg:sticky lg:top-24">
           <h2 className="px-2 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Conversations</h2>
           {isLoading && <Loader2 className="w-5 h-5 text-brand-400 animate-spin m-4" />}
-          {!isLoading && conversations.length === 0 && <p className="px-2 py-4 text-sm text-slate-500">No conversations yet.</p>}
+          {conversationsError && (
+            <div className="px-2 py-3 text-sm text-rose-300" role="alert">
+              <p>{conversationsError}</p>
+              <button type="button" onClick={() => void loadConversations()} className="mt-2 underline">
+                Try again
+              </button>
+            </div>
+          )}
+          {!isLoading && !conversationsError && conversations.length === 0 && <p className="px-2 py-4 text-sm text-slate-500">No conversations yet.</p>}
           <div className="space-y-1 max-h-64 lg:max-h-[60vh] overflow-y-auto">
             {conversations.map((conversation) => <button key={conversation.id} type="button" aria-current={selected?.id === conversation.id ? 'page' : undefined} onClick={() => setSelected(conversation)} disabled={isSending} className={`w-full text-left rounded-lg px-3 py-2.5 text-sm transition ${selected?.id === conversation.id ? 'bg-brand-500/15 text-brand-200 border border-brand-500/25' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-200 border border-transparent'} disabled:cursor-not-allowed disabled:opacity-50`}><span className="block truncate">{conversation.title}</span><span className="block text-[10px] text-slate-500 mt-1">{new Date(conversation.updatedAt).toLocaleDateString()}</span></button>)}
           </div>
+          {hasMoreConversations && (
+            <>
+              {olderConversationsError && (
+                <p className="px-2 pt-3 text-sm text-rose-300" role="alert">{olderConversationsError}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => void loadOlderConversations()}
+                disabled={isLoadingMoreConversations}
+                className="mt-3 w-full rounded-lg px-3 py-2 text-sm text-brand-300 hover:bg-slate-800/70 disabled:opacity-50"
+              >
+                {isLoadingMoreConversations
+                  ? 'Loading older conversations...'
+                  : olderConversationsError ? 'Retry loading older conversations' : 'Load older conversations'}
+              </button>
+            </>
+          )}
         </aside>
-        <CareerChat conversation={selected} messages={messages} isLoading={isMessagesLoading} isSending={isSending} error={error} onSend={handleSend} />
+        <CareerChat
+          conversation={selected}
+          messages={messages}
+          isLoading={isMessagesLoading}
+          isSending={isSending}
+          error={error}
+          onSend={handleSend}
+          hasOlderMessages={hasMoreMessages}
+          isLoadingOlderMessages={isLoadingOlderMessages}
+          olderMessagesError={olderMessagesError}
+          onLoadOlderMessages={() => void loadOlderMessages()}
+        />
       </div>
       <section className="glass-card p-5 sm:p-6" aria-labelledby="resume-improvement-heading">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
