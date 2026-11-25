@@ -4,6 +4,7 @@ import { beforeEach, describe, it } from 'node:test';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import User from '../src/models/User.js';
+import { createDashboardService } from '../src/services/dashboardService.js';
 import { extractAuthentication, generateToken } from '../src/utils/jwt.js';
 
 const testEnvironment = {
@@ -115,6 +116,41 @@ describe('profile and dashboard APIs', () => {
       authDependencies: {
         userModel,
         authenticateToken: (token) => extractAuthentication(token, testEnvironment),
+      },
+      dashboardDependencies: {
+        userModel,
+        authenticateToken: (token) => extractAuthentication(token, testEnvironment),
+        careerPlanModel: {
+          findOne() {
+            const query = {
+              sort() { return query; },
+              lean() { return Promise.resolve(null); },
+              then(resolve) { return Promise.resolve(null).then(resolve); },
+            };
+            return query;
+          },
+        },
+        applicationModel: {
+          aggregate() { return Promise.resolve([]); },
+          find() {
+            const query = {
+              sort() { return query; },
+              limit() { return query; },
+              lean() { return Promise.resolve([]); },
+            };
+            return query;
+          },
+        },
+        jobAnalysisModel: {
+          find() {
+            const query = {
+              sort() { return query; },
+              limit() { return query; },
+              lean() { return Promise.resolve([]); },
+            };
+            return query;
+          },
+        },
       },
     });
     ownerToken = generateToken(owner.email, owner.role, testEnvironment);
@@ -270,16 +306,21 @@ describe('profile and dashboard APIs', () => {
       .set('Authorization', `Bearer ${ownerToken}`);
 
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body, {
-      userId: owner._id,
-      fullName: owner.fullName,
-      email: owner.email,
-      careerGoal: owner.profile.careerGoal,
-      education: owner.profile.education,
-      profileCompletionPercentage: 100,
-      skillCount: 2,
-      profileStatus: 'COMPLETE',
-    });
+    assert.equal(response.body.userId, owner._id);
+    assert.equal(response.body.fullName, owner.fullName);
+    assert.equal(response.body.email, owner.email);
+    assert.equal(response.body.profileCompletionPercentage, 100);
+    assert.equal(response.body.skillCount, 2);
+    assert.equal(response.body.profileStatus, 'COMPLETE');
+    assert.equal(response.body.careerOverview.profileStatus, 'COMPLETE');
+    assert.equal(response.body.applicationOverview.total, 0);
+    assert.equal(response.body.applicationOverview.activeTotal, 0);
+    assert.deepEqual(response.body.followUps.overdue, []);
+    assert.deepEqual(response.body.followUps.upcoming, []);
+    assert.deepEqual(response.body.recentAnalyses, []);
+    assert.equal(response.body.careerOverview.plan, null);
+    assert.equal(response.body.meta.timezone, 'UTC');
+    assert.ok(Number.isFinite(Date.parse(response.body.meta.generatedAt)));
     assert.notEqual(response.body.userId, otherUser._id);
     assert.equal('password' in response.body, false);
     assert.equal('passwordHash' in response.body, false);
@@ -302,15 +343,308 @@ describe('profile and dashboard APIs', () => {
       .set('Authorization', `Bearer ${generateToken(noProfileUser.email, 'USER', testEnvironment)}`);
 
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body, {
-      userId: noProfileUser._id,
-      fullName: noProfileUser.fullName,
-      email: noProfileUser.email,
-      careerGoal: null,
-      education: null,
-      profileCompletionPercentage: 0,
-      skillCount: 0,
-      profileStatus: 'NOT_STARTED',
+    assert.equal(response.body.userId, noProfileUser._id);
+    assert.equal(response.body.careerGoal, null);
+    assert.equal(response.body.education, null);
+    assert.equal(response.body.profileCompletionPercentage, 0);
+    assert.equal(response.body.skillCount, 0);
+    assert.equal(response.body.profileStatus, 'NOT_STARTED');
+    assert.equal(response.body.careerOverview.profileStatus, 'NOT_STARTED');
+    assert.equal(response.body.applicationOverview.total, 0);
+    assert.deepEqual(response.body.nextActions.map((action) => action.id), [
+      'complete-profile',
+      'create-career-plan',
+      'add-first-application',
+      'analyze-first-job',
+    ]);
+  });
+});
+
+describe('Unified dashboard service', () => {
+  const userId = 'a'.repeat(24);
+  const now = new Date('2026-11-25T16:47:04.986Z');
+
+  function createUserModel(profile) {
+    return {
+      async findById(id) {
+        return id === userId
+          ? { _id: userId, fullName: 'Dashboard User', email: 'dashboard@example.com', profile }
+          : null;
+      },
+    };
+  }
+
+  function queryResult(value) {
+    const query = {
+      sort() { return query; },
+      limit() { return query; },
+      lean() { return Promise.resolve(value); },
+      then(resolve, reject) { return Promise.resolve(value).then(resolve, reject); },
+    };
+    return query;
+  }
+
+  it('returns plan progress, all application statuses, follow-up boundaries, and latest analyses', async () => {
+    const plan = {
+      _id: 'p'.repeat(24),
+      status: 'ACTIVE',
+      careerGoal: 'Backend Engineer',
+      updatedAt: new Date('2026-11-24T00:00:00.000Z'),
+      items: [
+        { category: 'SHORT_TERM', status: 'COMPLETED', completed: true, sortOrder: 0 },
+        { category: 'MEDIUM_TERM', status: 'IN_PROGRESS', completed: false, sortOrder: 1 },
+        { category: 'LONG_TERM', status: 'NOT_STARTED', completed: false, sortOrder: 2 },
+      ],
+    };
+    const overdue = [
+      { _id: '1'.repeat(24), companyName: 'Yesterday Co', jobTitle: 'Engineer', status: 'APPLIED', followUpDate: new Date('2026-11-24T00:00:00.000Z'), applicationUrl: null },
+    ];
+    const upcoming = [
+      { _id: '2'.repeat(24), companyName: 'Today Co', jobTitle: 'Developer', status: 'ASSESSMENT', followUpDate: new Date('2026-11-25T00:00:00.000Z'), applicationUrl: 'https://example.com/apply' },
+    ];
+    const analyses = [
+      { _id: '3'.repeat(24), jobTitle: 'Backend Engineer', companyName: 'Example', overallMatchScore: 82, createdAt: new Date('2026-11-25T12:00:00.000Z') },
+    ];
+    const applicationModel = {
+      aggregate(pipeline) {
+        if (pipeline[1]?.$group?._id === '$status') {
+          return Promise.resolve([
+            { _id: 'SAVED', count: 1 },
+            { _id: 'APPLIED', count: 2 },
+            { _id: 'ASSESSMENT', count: 1 },
+            { _id: 'INTERVIEW', count: 1 },
+            { _id: 'OFFER', count: 1 },
+            { _id: 'REJECTED', count: 1 },
+            { _id: 'WITHDRAWN', count: 1 },
+          ]);
+        }
+        return Promise.resolve([{ overdueCount: 1, upcomingCount: 1 }]);
+      },
+      find(filter) {
+        if (filter.followUpDate?.$lt && Object.hasOwn(filter.followUpDate, '$gte')) return queryResult(upcoming);
+        if (filter.followUpDate?.$lt) return queryResult(overdue);
+        return queryResult([]);
+      },
+    };
+    const service = createDashboardService({
+      userModel: createUserModel(makeProfile()),
+      careerPlanModel: { findOne: () => queryResult(plan) },
+      applicationModel,
+      jobAnalysisModel: { find: () => queryResult(analyses) },
+      clock: () => now,
     });
+
+    const response = await service.getDashboard({ id: userId });
+
+    assert.equal(response.applicationOverview.total, 8);
+    assert.equal(response.applicationOverview.activeTotal, 5);
+    assert.deepEqual(response.applicationOverview.byStatus.REJECTED, 1);
+    assert.deepEqual(response.applicationOverview.byStatus.WITHDRAWN, 1);
+    assert.equal(response.followUps.overdueCount, 1);
+    assert.equal(response.followUps.upcomingCount, 1);
+    assert.equal(response.followUps.overdue[0].companyName, 'Yesterday Co');
+    assert.equal(response.followUps.upcoming[0].companyName, 'Today Co');
+    assert.equal(response.recentAnalyses[0].jobTitle, 'Backend Engineer');
+    assert.equal(response.careerOverview.plan.progress.completedItems, 1);
+    assert.equal(response.careerOverview.plan.progress.inProgressItems, 1);
+    assert.equal(response.careerOverview.plan.progress.remainingItems, 2);
+    assert.equal(response.careerOverview.plan.progress.completionPercent, 33);
+    assert.equal(response.careerOverview.plan.progress.currentStage, 'MEDIUM_TERM');
+    assert.equal(response.meta.timezone, 'UTC');
+  });
+
+  it('scopes every model query to the authenticated user and does not accept another user ID', async () => {
+    let planFilter;
+    let applicationFilter;
+    let analysisFilter;
+    const service = createDashboardService({
+      userModel: createUserModel(makeProfile()),
+      careerPlanModel: {
+        findOne(filter) {
+          planFilter = filter;
+          return queryResult(null);
+        },
+      },
+      applicationModel: {
+        aggregate(pipeline) {
+          applicationFilter = pipeline[0].$match;
+          return Promise.resolve([]);
+        },
+        find(filter) {
+          applicationFilter = filter;
+          return queryResult([]);
+        },
+      },
+      jobAnalysisModel: {
+        find(filter) {
+          analysisFilter = filter;
+          return queryResult([]);
+        },
+      },
+      clock: () => now,
+    });
+
+    await service.getDashboard({ id: userId });
+
+    assert.equal(planFilter.user, userId);
+    assert.equal(applicationFilter.userId, userId);
+    assert.equal(analysisFilter.user, userId);
+  });
+
+  it('does not silently convert database failures into empty dashboard metrics', async () => {
+    const failure = new Error('database unavailable');
+    const service = createDashboardService({
+      userModel: createUserModel(makeProfile()),
+      careerPlanModel: { findOne: () => queryResult(null) },
+      applicationModel: {
+        aggregate() { return Promise.reject(failure); },
+        find() { return queryResult([]); },
+      },
+      jobAnalysisModel: { find: () => queryResult([]) },
+      clock: () => now,
+    });
+
+    await assert.rejects(
+      () => service.getDashboard({ id: userId }),
+      (error) => error === failure,
+    );
+  });
+
+  it('generates only relevant next actions for a complete new dashboard', async () => {
+    const service = createDashboardService({
+      userModel: createUserModel(makeProfile()),
+      careerPlanModel: { findOne: () => queryResult(null) },
+      applicationModel: {
+        aggregate() { return Promise.resolve([]); },
+        find() { return queryResult([]); },
+      },
+      jobAnalysisModel: { find: () => queryResult([]) },
+      clock: () => now,
+    });
+
+    const response = await service.getDashboard({ id: userId });
+    assert.deepEqual(response.nextActions.map((action) => action.id), [
+      'create-career-plan',
+      'add-first-application',
+      'analyze-first-job',
+    ]);
+  });
+
+  it('uses UTC today and the seven-day boundary and excludes rejected or withdrawn applications', async () => {
+    let overdueFilter;
+    let upcomingFilter;
+    const service = createDashboardService({
+      userModel: createUserModel(makeProfile()),
+      careerPlanModel: { findOne: () => queryResult(null) },
+      applicationModel: {
+        aggregate(pipeline) {
+          if (pipeline[1]?.$group?._id === '$status') return Promise.resolve([]);
+          return Promise.resolve([{ overdueCount: 2, upcomingCount: 1 }]);
+        },
+        find(filter) {
+          if (filter.followUpDate?.$lt && Object.hasOwn(filter.followUpDate, '$gte')) {
+            upcomingFilter = filter;
+            return queryResult([{
+              _id: 'u'.repeat(24),
+              companyName: 'Boundary Co',
+              jobTitle: 'Developer',
+              status: 'APPLIED',
+              followUpDate: new Date('2026-12-01T23:59:59.999Z'),
+            }]);
+          }
+          overdueFilter = filter;
+          return queryResult([
+            { _id: 'o'.repeat(24), companyName: 'Overdue Co', jobTitle: 'Engineer', status: 'SAVED', followUpDate: new Date('2026-11-24T00:00:00.000Z') },
+            { _id: 'n'.repeat(24), companyName: 'Overdue Two', jobTitle: 'Engineer II', status: 'INTERVIEW', followUpDate: new Date('2026-11-23T00:00:00.000Z') },
+          ]);
+        },
+      },
+      jobAnalysisModel: { find: () => queryResult([]) },
+      clock: () => now,
+    });
+
+    const response = await service.getDashboard({ id: userId });
+    assert.equal(overdueFilter.followUpDate.$lt.toISOString(), '2026-11-25T00:00:00.000Z');
+    assert.equal(upcomingFilter.followUpDate.$gte.toISOString(), '2026-11-25T00:00:00.000Z');
+    assert.equal(upcomingFilter.followUpDate.$lt.toISOString(), '2026-12-02T00:00:00.000Z');
+    assert.deepEqual(overdueFilter.status.$in, ['SAVED', 'APPLIED', 'ASSESSMENT', 'INTERVIEW']);
+    assert.deepEqual(upcomingFilter.status.$in, ['SAVED', 'APPLIED', 'ASSESSMENT', 'INTERVIEW']);
+    assert.equal(response.followUps.overdueCount, 2);
+    assert.equal(response.followUps.upcomingCount, 1);
+  });
+
+  it('limits follow-up lists and recent analyses to five records and uses aggregate counts', async () => {
+    const overdue = Array.from({ length: 5 }, (_, index) => ({
+      _id: String(index + 1).repeat(24),
+      companyName: `Overdue ${index}`,
+      jobTitle: 'Engineer',
+      status: 'APPLIED',
+      followUpDate: new Date(`2026-11-${String(20 + index).padStart(2, '0')}T00:00:00.000Z`),
+    }));
+    const upcoming = Array.from({ length: 5 }, (_, index) => ({
+      _id: String(index + 6).repeat(24),
+      companyName: `Upcoming ${index}`,
+      jobTitle: 'Developer',
+      status: 'ASSESSMENT',
+      followUpDate: new Date(`2026-11-${String(25 + index).padStart(2, '0')}T00:00:00.000Z`),
+    }));
+    const analyses = Array.from({ length: 5 }, (_, index) => ({
+      _id: String(index + 11).repeat(24),
+      jobTitle: `Role ${index}`,
+      companyName: `Company ${index}`,
+      overallMatchScore: 80 - index,
+      createdAt: new Date(`2026-11-${String(25 - index).padStart(2, '0')}T12:00:00.000Z`),
+    }));
+    const service = createDashboardService({
+      userModel: createUserModel(makeProfile()),
+      careerPlanModel: { findOne: () => queryResult(null) },
+      applicationModel: {
+        aggregate(pipeline) {
+          if (pipeline[1]?.$group?._id === '$status') return Promise.resolve([]);
+          return Promise.resolve([{ overdueCount: 7, upcomingCount: 6 }]);
+        },
+        find(filter) {
+          if (filter.followUpDate?.$lt && Object.hasOwn(filter.followUpDate, '$gte')) return queryResult(upcoming);
+          return queryResult(overdue);
+        },
+      },
+      jobAnalysisModel: { find: () => queryResult(analyses) },
+      clock: () => now,
+    });
+
+    const response = await service.getDashboard({ id: userId });
+    assert.equal(response.followUps.overdue.length, 5);
+    assert.equal(response.followUps.upcoming.length, 5);
+    assert.equal(response.followUps.overdueCount, 7);
+    assert.equal(response.followUps.upcomingCount, 6);
+    assert.equal(response.recentAnalyses.length, 5);
+  });
+
+  it('treats a completed career plan as not needing a continue-plan action', async () => {
+    const completedPlan = {
+      _id: 'c'.repeat(24),
+      status: 'COMPLETED',
+      careerGoal: 'Backend Engineer',
+      updatedAt: now,
+      items: [
+        { category: 'SHORT_TERM', status: 'COMPLETED', completed: true, sortOrder: 0 },
+        { category: 'MEDIUM_TERM', status: 'COMPLETED', completed: true, sortOrder: 1 },
+      ],
+    };
+    const service = createDashboardService({
+      userModel: createUserModel(makeProfile()),
+      careerPlanModel: { findOne: () => queryResult(completedPlan) },
+      applicationModel: {
+        aggregate() { return Promise.resolve([]); },
+        find() { return queryResult([]); },
+      },
+      jobAnalysisModel: { find: () => queryResult([{ _id: 'r'.repeat(24), jobTitle: 'Engineer', overallMatchScore: 90, createdAt: now }]) },
+      clock: () => now,
+    });
+
+    const response = await service.getDashboard({ id: userId });
+    assert.equal(response.careerOverview.plan.progress.completionPercent, 100);
+    assert.equal(response.careerOverview.plan.progress.remainingItems, 0);
+    assert.equal(response.nextActions.some((action) => action.id === 'continue-career-plan'), false);
   });
 });

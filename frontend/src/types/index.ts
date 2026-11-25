@@ -68,6 +68,77 @@ export interface UserProfileResponse extends UserProfileRequest {
   updatedAt: string;
 }
 
+export interface CareerPlanDashboardProgress {
+  totalItems: number;
+  completedItems: number;
+  inProgressItems: number;
+  remainingItems: number;
+  completionPercent: number;
+  currentStage: CareerPlanCategory | null;
+}
+
+export interface DashboardCareerPlan {
+  id: string;
+  status: 'ACTIVE' | 'COMPLETED';
+  careerGoal: string | null;
+  progress: CareerPlanDashboardProgress;
+  updatedAt: string | null;
+}
+
+export interface DashboardCareerOverview {
+  profileCompletionPercentage: number;
+  profileStatus: 'COMPLETE' | 'IN_PROGRESS' | 'NOT_STARTED' | string;
+  skillCount: number;
+  careerGoal: string | null;
+  plan: DashboardCareerPlan | null;
+}
+
+export interface DashboardApplicationOverview {
+  total: number;
+  activeTotal: number;
+  byStatus: Record<ApplicationStatus, number>;
+}
+
+export interface DashboardFollowUp {
+  id: string;
+  companyName: string;
+  jobTitle: string;
+  status: ApplicationStatus;
+  followUpDate: string;
+  applicationUrl: string | null;
+}
+
+export interface DashboardFollowUps {
+  overdueCount: number;
+  upcomingCount: number;
+  overdue: DashboardFollowUp[];
+  upcoming: DashboardFollowUp[];
+}
+
+export interface DashboardRecentAnalysis {
+  id: string;
+  jobTitle: string;
+  companyName: string | null;
+  overallMatchScore: number;
+  createdAt: string | null;
+}
+
+export type DashboardNextActionPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface DashboardNextAction {
+  id: string;
+  priority: DashboardNextActionPriority;
+  title: string;
+  description: string;
+  actionLabel: string;
+  path: '/profile' | '/career-plan' | '/applications' | '/job-intelligence';
+}
+
+export interface DashboardMetadata {
+  generatedAt: string;
+  timezone: 'UTC';
+}
+
 export interface DashboardResponse {
   userId: string;
   fullName: string;
@@ -77,6 +148,12 @@ export interface DashboardResponse {
   profileCompletionPercentage: number;
   skillCount: number;
   profileStatus: 'COMPLETE' | 'IN_PROGRESS' | 'NOT_STARTED' | string;
+  careerOverview: DashboardCareerOverview;
+  applicationOverview: DashboardApplicationOverview;
+  followUps: DashboardFollowUps;
+  recentAnalyses: DashboardRecentAnalysis[];
+  nextActions: DashboardNextAction[];
+  meta: DashboardMetadata;
 }
 
 /** Unified auth response type — mirrors LoginResponse from the backend. */

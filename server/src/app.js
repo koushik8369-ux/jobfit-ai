@@ -20,6 +20,7 @@ export function createApp({
 	jobRecommendationDependencies = authDependencies,
 	careerDependencies = authDependencies,
 	applicationDependencies = authDependencies,
+	dashboardDependencies = authDependencies,
 } = {}) {
 	const app = express();
 
@@ -28,7 +29,7 @@ export function createApp({
 	app.use('/api', healthRoutes);
 	app.use('/api/auth', createAuthRoutes(authDependencies));
 	app.use('/api/profile', createProfileRoutes(authDependencies));
-	app.use('/api/dashboard', createDashboardRoutes(authDependencies));
+	app.use('/api/dashboard', createDashboardRoutes(dashboardDependencies));
 	app.use('/api/resume', createResumeRoutes(resumeDependencies));
 	app.use('/api/job-intelligence', createJobIntelligenceRoutes(jobDependencies));
 	app.use('/api/jobs', createJobRoutes(jobRecommendationDependencies));

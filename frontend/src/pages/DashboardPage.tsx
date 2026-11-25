@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { AlertCircle, Award, BookOpen, LayoutDashboard, Loader2, Target, UserCircle2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { getAuthErrorMessage } from '../services/authService';
 import { getDashboard } from '../services/api';
 import type { DashboardResponse } from '../types';
+import { DashboardHeader } from '../components/dashboard/DashboardHeader';
+import { CareerSummaryCards } from '../components/dashboard/CareerSummaryCards';
+import { ApplicationOverviewCard } from '../components/dashboard/ApplicationOverviewCard';
+import { FollowUpCenter } from '../components/dashboard/FollowUpCenter';
+import { RecentAnalyses } from '../components/dashboard/RecentAnalyses';
+import { NextActions } from '../components/dashboard/NextActions';
 
 export const DashboardPage: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -50,95 +55,31 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
-  const completion = Math.min(100, Math.max(0, dashboard.profileCompletionPercentage));
-
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
-            <LayoutDashboard className="w-7 h-7 text-brand-400" />
-            <span>Dashboard</span>
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Welcome back, {dashboard.fullName}. Here is your current career profile status.
-          </p>
+      <DashboardHeader dashboard={dashboard} />
+      <CareerSummaryCards dashboard={dashboard} />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-7">
+          <ApplicationOverviewCard overview={dashboard.applicationOverview} />
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-300 text-xs font-medium">
-          <UserCircle2 className="w-3.5 h-3.5" />
-          <span>{dashboard.profileStatus.replace('_', ' ')}</span>
+        <div className="lg:col-span-5">
+          <FollowUpCenter followUps={dashboard.followUps} />
         </div>
       </div>
 
-      <section className="glass-card p-6 sm:p-8 border border-brand-500/25 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 shrink-0 rounded-xl bg-brand-500/10 border border-brand-500/25 flex items-center justify-center text-brand-300">
-            <Target className="w-6 h-6" aria-hidden="true" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-white">Check Your Job Fit</h2>
-            <p className="text-sm text-slate-300 max-w-xl leading-relaxed">
-              Upload your resume and compare it with a job description to find out how well you match the role.
-            </p>
-          </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <NextActions actions={dashboard.nextActions} />
         </div>
-        <Link
-          to="/job-intelligence"
-          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm transition-colors shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
-        >
-          Analyze My Job Fit <span aria-hidden="true">→</span>
-        </Link>
-      </section>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="glass-card p-5 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Profile completion</span>
-            <Target className="w-4 h-4 text-brand-400" />
-          </div>
-          <div className="text-2xl font-bold text-white">{completion}%</div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-800" aria-label={`Profile ${completion}% complete`} role="progressbar" aria-valuenow={completion} aria-valuemin={0} aria-valuemax={100}>
-            <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-cyan-400 transition-all" style={{ width: `${completion}%` }} />
-          </div>
-        </div>
-
-        <div className="glass-card p-5 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Identified skills</span>
-            <Award className="w-4 h-4 text-purple-400" />
-          </div>
-          <div className="text-2xl font-bold text-white">{dashboard.skillCount}</div>
-          <p className="text-xs text-slate-500">Skills saved to your profile</p>
-        </div>
-
-        <div className="glass-card p-5 space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Career goal</span>
-            <BookOpen className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="text-lg font-bold text-white truncate">{dashboard.careerGoal || 'Not set'}</div>
-          <p className="text-xs text-slate-500">Your current direction</p>
-        </div>
-      </div>
-
-      <div className="glass-card p-6 space-y-5">
-        <h2 className="text-lg font-semibold text-slate-200">Profile snapshot</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-sm">
-          <Snapshot label="Email" value={dashboard.email} />
-          <Snapshot label="Education" value={dashboard.education} />
-          <Snapshot label="Career goal" value={dashboard.careerGoal} />
+        <div className="lg:col-span-7">
+          <RecentAnalyses analyses={dashboard.recentAnalyses} />
         </div>
       </div>
     </div>
   );
 };
-
-const Snapshot: React.FC<{ label: string; value: string | null }> = ({ label, value }) => (
-  <div className="space-y-1">
-    <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
-    <p className="text-slate-200">{value || 'Not set'}</p>
-  </div>
-);
 
 const LoadingState: React.FC<{ label: string }> = ({ label }) => (
   <div className="min-h-[45vh] flex flex-col items-center justify-center gap-3 text-slate-400">
